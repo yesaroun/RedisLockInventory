@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:6.2-alpine
+    container_name: redis-inventory
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      # 데이터 영속성을 위한 볼륨 마운트
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - inventory-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi-inventory
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    networks:
+      - inventory-network
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  inventory-network:
+    driver: bridge

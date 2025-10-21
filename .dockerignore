@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# uv
+# uv.lock은 Docker 빌드에 필요하므로 제외하지 않음
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+
+# 테스트
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 문서
+*.md
+.docs/
+
+# 기타
+.DS_Store
+*.log
+logs/
+temp/
+tmp/
+
+# Docker 관련
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 부하 테스트
+load_tests/
