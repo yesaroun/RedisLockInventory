@@ -20,6 +20,80 @@
 
 ---
 
+## Phase 0: 환경 설정 및 설치
+
+### 0.1 uv 설치
+**작업 내용**:
+- [x] uv 패키지 매니저 설치 (아직 설치하지 않은 경우)
+  ```bash
+  # macOS/Linux
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+
+  # Windows (PowerShell)
+  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+  # 또는 pip로 설치
+  pip install uv
+  ```
+
+### 0.2 프로젝트 초기화
+**작업 내용**:
+- [x] 가상환경 생성 및 활성화
+  ```bash
+  # uv로 가상환경 생성
+  uv venv
+
+  # 가상환경 활성화
+  source .venv/bin/activate  # Linux/Mac
+  # .venv\Scripts\activate   # Windows
+  ```
+
+### 0.3 의존성 설치
+**작업 내용**:
+- [x] pyproject.toml 기반 의존성 설치
+  ```bash
+  # 개발 의존성 포함 전체 설치
+  uv sync --all-extras
+
+  # 또는 프로덕션 의존성만
+  uv sync
+  ```
+
+### 0.4 환경 변수 설정
+**작업 내용**:
+- [x] `.env` 파일 생성 (`.env.example` 참고)
+  ```bash
+  cp .env.example .env
+  ```
+- [x] `.env` 파일 내용 확인 및 수정
+  ```
+  REDIS_HOST=localhost
+  REDIS_PORT=6379
+  REDIS_DB=0
+  DATABASE_URL=sqlite:///./inventory.db
+  JWT_SECRET_KEY=your-secret-key-change-in-production
+  JWT_ALGORITHM=HS256
+  JWT_EXPIRATION_MINUTES=30
+  LOCK_TIMEOUT_SECONDS=10
+  LOCK_MAX_RETRIES=3
+  LOCK_RETRY_DELAY=0.1
+  ```
+
+### 0.5 Docker 환경 확인
+**작업 내용**:
+- [x] Docker 및 Docker Compose 설치 확인
+  ```bash
+  docker --version
+  docker-compose --version
+  ```
+- [x] Docker Compose로 Redis 실행 테스트
+  ```bash
+  docker-compose up -d redis
+  docker-compose logs redis
+  ```
+
+---
+
 ## 개발 원칙
 
 ### TDD (Test-Driven Development)
@@ -94,15 +168,72 @@ Models → Services → API → Integration Tests
   - Foreign key constraint 테스트
 
 ### 1.4 모델 초기화 및 마이그레이션
-**파일**: `app/models/__init__.py`
+**파일**: `app/models/__init__.py`, `alembic/`
 
 **작업 내용**:
 - [ ] 모든 모델 import 및 export
+  ```python
+  # app/models/__init__.py
+  from app.db.models import User, Product, Purchase
+
+  __all__ = ["User", "Product", "Purchase"]
+  ```
+
 - [ ] Alembic 마이그레이션 초기 설정
-  - `alembic init alembic`
-  - `alembic.ini` 설정 (database_url)
-  - 초기 마이그레이션 생성
+  ```bash
+  # Alembic 초기화
+  uv run alembic init alembic
+  ```
+
+- [ ] `alembic.ini` 파일 수정
+  ```ini
+  # alembic.ini에서 sqlalchemy.url 주석 처리 또는 삭제
+  # sqlalchemy.url = driver://user:pass@localhost/dbname
+  ```
+
+- [ ] `alembic/env.py` 파일 수정
+  ```python
+  # alembic/env.py
+  from app.core.config import get_settings
+  from app.db.database import Base
+  from app.db.models import User, Product, Purchase  # 모든 모델 import
+
+  # settings에서 DATABASE_URL 가져오기
+  settings = get_settings()
+  config.set_main_option("sqlalchemy.url", settings.database_url)
+
+  # target_metadata 설정
+  target_metadata = Base.metadata
+  ```
+
+- [ ] 초기 마이그레이션 생성 및 적용
+  ```bash
+  # 첫 번째 마이그레이션 생성 (자동 감지)
+  uv run alembic revision --autogenerate -m "Initial tables: users, products, purchases"
+
+  # 마이그레이션 적용
+  uv run alembic upgrade head
+
+  # 마이그레이션 상태 확인
+  uv run alembic current
+
+  # 마이그레이션 히스토리 확인
+  uv run alembic history
+  ```
+
 - [ ] 테이블 생성 검증
+  ```bash
+  # SQLite DB 파일 확인
+  ls -l inventory.db
+
+  # SQLite CLI로 테이블 확인 (선택적)
+  sqlite3 inventory.db ".tables"
+  sqlite3 inventory.db ".schema users"
+  ```
+
+**참고**:
+- Alembic은 선택적이며, 간단한 프로젝트는 `Base.metadata.create_all(engine)`으로도 가능
+- 프로덕션 환경에서는 Alembic 사용 권장
 
 ---
 
@@ -203,25 +334,85 @@ Models → Services → API → Integration Tests
 - [ ] InventoryService 클래스 구현
   - `initialize_stock(product_id: int, quantity: int, redis: Redis) -> bool`
     - Redis key: `stock:{product_id}`, value: quantity
+    ```python
+    # 재고 초기화
+    redis.set(f"stock:{product_id}", quantity)
+    ```
+
   - `get_stock(product_id: int, redis: Redis) -> int | None`
     - 재고 수량 조회
+    ```python
+    stock = redis.get(f"stock:{product_id}")
+    return int(stock) if stock else None
+    ```
+
   - `_get_lock_key(product_id: int) -> str`
     - 락 키 생성: `lock:stock:{product_id}`
-  - `_acquire_lock(product_id: int, redis: Redis, settings: Settings) -> bool`
+
+  - `_acquire_lock(product_id: int, redis: Redis, settings: Settings) -> str | None`
     - SETNX로 락 획득, TTL 설정 (데드락 방지)
-  - `_release_lock(product_id: int, redis: Redis) -> bool`
-    - 락 해제
+    - 고유 락 ID (UUID) 반환
+    ```python
+    import uuid
+    lock_key = f"lock:stock:{product_id}"
+    lock_id = str(uuid.uuid4())
+    # NX: key가 없을 때만 set, EX: TTL 설정
+    acquired = redis.set(lock_key, lock_id, nx=True, ex=settings.lock_timeout_seconds)
+    return lock_id if acquired else None
+    ```
+
+  - `_release_lock(product_id: int, lock_id: str, redis: Redis) -> bool`
+    - Lua 스크립트로 원자적 락 해제 (락 ID 비교 후 삭제)
+    ```python
+    # Lua 스크립트: 자신이 획득한 락만 해제
+    release_script = """
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("DEL", KEYS[1])
+    else
+        return 0
+    end
+    """
+    lock_key = f"lock:stock:{product_id}"
+    result = redis.eval(release_script, 1, lock_key, lock_id)
+    return bool(result)
+    ```
+
   - `decrease_stock(product_id: int, quantity: int, redis: Redis, settings: Settings) -> bool`
     - 락 획득 → 재고 확인 → 재고 감소 → 락 해제
     - 재시도 메커니즘 포함
+    ```python
+    # Lua 스크립트를 사용한 원자적 재고 감소 (선택적, 더 안전)
+    decrease_script = """
+    local current_stock = redis.call("GET", KEYS[1])
+    if not current_stock then
+        return -2  -- 상품 없음
+    end
+    current_stock = tonumber(current_stock)
+    local quantity = tonumber(ARGV[1])
+    if current_stock >= quantity then
+        redis.call("DECRBY", KEYS[1], quantity)
+        return current_stock - quantity  -- 남은 재고 반환
+    else
+        return -1  -- 재고 부족
+    end
+    """
+    # 또는 락 기반 방식으로 구현
+    ```
+
 - [ ] 테스트 작성 (TDD):
   - 재고 초기화 테스트
   - 재고 조회 테스트
   - 락 획득/해제 테스트
+  - Lua 스크립트 락 해제 테스트 (잘못된 lock_id로 해제 시도 실패)
   - 재고 감소 성공 테스트
   - 재고 부족 시 감소 실패 테스트
   - 락 충돌 시 재시도 테스트
-  - 락 만료 테스트 (TTL)
+  - 락 만료 테스트 (TTL, time.sleep 활용)
+
+**Lua 스크립트 사용 이유**:
+- Redis 명령어의 원자성 보장 (GET + 비교 + DEL을 하나의 트랜잭션으로)
+- 다른 클라이언트가 획득한 락을 실수로 해제하는 것 방지
+- 네트워크 왕복 횟수 감소
 
 ### 3.2 상품 관리 서비스
 **파일**: `app/services/product_service.py`
@@ -327,7 +518,64 @@ Models → Services → API → Integration Tests
 
 ## Phase 5: 통합 테스트 및 동시성 테스트
 
-### 5.1 통합 테스트
+### 5.1 Redis 초기 데이터 설정
+**파일**: `scripts/init_redis.py`
+
+**작업 내용**:
+- [ ] Redis 초기 재고 설정 스크립트 작성
+  ```python
+  # scripts/init_redis.py
+  import redis
+  from app.core.config import get_settings
+
+  def init_redis_data():
+      settings = get_settings()
+      r = redis.Redis(
+          host=settings.redis_host,
+          port=settings.redis_port,
+          db=settings.redis_db,
+          decode_responses=True
+      )
+
+      # 샘플 상품 재고 설정
+      products = [
+          {"id": 1, "stock": 100},
+          {"id": 2, "stock": 50},
+          {"id": 3, "stock": 200},
+      ]
+
+      for product in products:
+          key = f"stock:{product['id']}"
+          r.set(key, product['stock'])
+          print(f"Set {key} = {product['stock']}")
+
+      print("Redis initialization completed!")
+
+  if __name__ == "__main__":
+      init_redis_data()
+  ```
+
+- [ ] 스크립트 실행
+  ```bash
+  # 로컬 환경
+  uv run python scripts/init_redis.py
+
+  # Docker 환경
+  docker-compose exec app python scripts/init_redis.py
+  ```
+
+- [ ] Redis CLI로 재고 확인
+  ```bash
+  # Docker 환경
+  docker-compose exec redis redis-cli GET stock:1
+  docker-compose exec redis redis-cli KEYS "stock:*"
+
+  # 로컬 환경
+  redis-cli GET stock:1
+  redis-cli KEYS "stock:*"
+  ```
+
+### 5.2 통합 테스트
 **파일**: `tests/integration/test_full_flow.py`
 
 **작업 내용**:
@@ -336,7 +584,89 @@ Models → Services → API → Integration Tests
 - [ ] 여러 사용자 시나리오 테스트
   - 여러 사용자가 동일 상품 구매 (동시성)
 
-### 5.2 동시성 테스트 (멀티스레드)
+### 5.3 수동 테스트 시나리오
+**작업 내용**:
+- [ ] Docker Compose로 서버 실행
+  ```bash
+  # 모든 서비스 빌드 및 실행
+  docker-compose up --build
+
+  # 백그라운드 실행
+  docker-compose up -d
+
+  # 로그 확인
+  docker-compose logs -f app
+
+  # 서비스 상태 확인
+  docker-compose ps
+  ```
+
+- [ ] Swagger UI 접속 및 API 테스트
+  - URL: `http://localhost:8000/docs`
+  - 테스트 시나리오:
+    1. **회원 가입**: `POST /api/auth/register`
+       ```json
+       {
+         "username": "testuser1",
+         "password": "testpassword123"
+       }
+       ```
+       - 예상 응답: 201 Created
+
+    2. **로그인**: `POST /api/auth/login`
+       ```json
+       {
+         "username": "testuser1",
+         "password": "testpassword123"
+       }
+       ```
+       - 예상 응답: 200 OK, `access_token` 발급
+       - 토큰 복사 (Swagger UI의 "Authorize" 버튼에 입력)
+
+    3. **상품 생성**: `POST /api/products`
+       ```json
+       {
+         "name": "MacBook Pro",
+         "price": 2500000,
+         "initial_stock": 10
+       }
+       ```
+       - 예상 응답: 201 Created, `product_id` 반환
+
+    4. **재고 조회**: `GET /api/products/{product_id}/stock`
+       - 예상 응답: 200 OK, `quantity: 10`
+
+    5. **구매**: `POST /api/purchases`
+       ```json
+       {
+         "product_id": 1,
+         "quantity": 2
+       }
+       ```
+       - 예상 응답: 200 OK
+
+    6. **재고 재조회**: `GET /api/products/{product_id}/stock`
+       - 예상 응답: 200 OK, `quantity: 8` (10 - 2)
+
+    7. **구매 이력 조회**: `GET /api/purchases/me`
+       - 예상 응답: 200 OK, 구매 내역 목록
+
+- [ ] Redis에서 최종 재고 확인
+  ```bash
+  docker-compose exec redis redis-cli GET stock:1
+  # 예상 결과: "8"
+  ```
+
+- [ ] 서비스 종료 및 정리
+  ```bash
+  # 서비스 중지
+  docker-compose down
+
+  # 볼륨까지 삭제 (데이터 초기화)
+  docker-compose down -v
+  ```
+
+### 5.4 동시성 테스트 (멀티스레드)
 **파일**: `tests/integration/test_concurrency.py`
 
 **작업 내용**:
@@ -354,24 +684,193 @@ Models → Services → API → Integration Tests
 
 **작업 내용**:
 - [ ] Locust User 클래스 구현
-  - 회원 가입
-  - 로그인 (토큰 저장)
-  - 상품 조회
-  - 구매 시도
-  - 구매 이력 조회
+  ```python
+  # load_tests/locustfile.py
+  from locust import HttpUser, task, between
+  import random
+
+  class InventoryUser(HttpUser):
+      wait_time = between(1, 3)  # 사용자당 대기 시간 1~3초
+
+      def on_start(self):
+          """각 사용자 시작 시 회원가입 및 로그인"""
+          # 고유한 사용자명 생성
+          self.username = f"user_{random.randint(1000, 9999)}"
+          self.password = "testpass123"
+
+          # 회원 가입
+          response = self.client.post("/api/auth/register", json={
+              "username": self.username,
+              "password": self.password
+          })
+
+          # 로그인 및 토큰 저장
+          response = self.client.post("/api/auth/login", json={
+              "username": self.username,
+              "password": self.password
+          })
+          if response.status_code == 200:
+              self.token = response.json()["access_token"]
+              self.headers = {"Authorization": f"Bearer {self.token}"}
+          else:
+              self.headers = {}
+
+      @task(3)  # 가중치 3 (30%)
+      def view_products(self):
+          """상품 목록 조회"""
+          self.client.get("/api/products", headers=self.headers)
+
+      @task(2)  # 가중치 2 (20%)
+      def view_stock(self):
+          """재고 조회"""
+          product_id = random.randint(1, 3)  # 상품 ID 1~3
+          self.client.get(f"/api/products/{product_id}/stock", headers=self.headers)
+
+      @task(5)  # 가중치 5 (50%)
+      def purchase_product(self):
+          """상품 구매"""
+          product_id = random.randint(1, 3)
+          quantity = random.randint(1, 2)
+
+          self.client.post("/api/purchases", headers=self.headers, json={
+              "product_id": product_id,
+              "quantity": quantity
+          })
+  ```
+
 - [ ] 실행 가이드 작성 (`load_tests/README.md`)
-  - `uv run locust -f load_tests/locustfile.py`
-  - 목표 RPS, 사용자 수, 시나리오 설명
+  ```markdown
+  # Locust 부하 테스트 가이드
+
+  ## 실행 방법
+
+  ### 1. Locust 웹 UI 모드
+  \`\`\`bash
+  uv run locust -f load_tests/locustfile.py --host=http://localhost:8000
+  \`\`\`
+  - 브라우저에서 http://localhost:8089 접속
+  - Number of users: 100
+  - Spawn rate: 10 (초당 10명씩 증가)
+  - Host: http://localhost:8000
+
+  ### 2. 헤드리스 모드 (CLI)
+  \`\`\`bash
+  uv run locust -f load_tests/locustfile.py \\
+    --headless \\
+    --users 100 \\
+    --spawn-rate 10 \\
+    --run-time 60s \\
+    --host=http://localhost:8000
+  \`\`\`
+
+  ## 테스트 시나리오
+  - 동시 사용자: 100명
+  - 증가율: 초당 10명
+  - 실행 시간: 60초
+  - 작업 비율:
+    - 상품 목록 조회: 30%
+    - 재고 조회: 20%
+    - 구매: 50%
+  \`\`\`
 
 ### 6.2 부하 테스트 실행 및 결과 분석
 **작업 내용**:
-- [ ] 부하 테스트 수행
-  - 100명 동시 사용자, 10초간 구매 요청
-- [ ] 결과 분석 문서 작성 (`docs/LOAD_TEST_RESULT.md`)
-  - 응답 시간 분포
-  - 에러율
-  - 락 충돌 재시도 빈도
-  - 재고 정합성 확인
+- [ ] 사전 준비
+  ```bash
+  # 1. Docker Compose로 서비스 실행
+  docker-compose up -d
+
+  # 2. Redis 초기 데이터 설정
+  docker-compose exec app python scripts/init_redis.py
+
+  # 3. 초기 재고 확인
+  docker-compose exec redis redis-cli KEYS "stock:*"
+  docker-compose exec redis redis-cli GET stock:1
+  ```
+
+- [ ] Locust 웹 UI로 부하 테스트 수행
+  ```bash
+  # Locust 시작
+  uv run locust -f load_tests/locustfile.py --host=http://localhost:8000
+
+  # 브라우저에서 http://localhost:8089 접속
+  # 설정:
+  # - Number of users: 100
+  # - Spawn rate: 10
+  # - Run time: 60s
+  ```
+
+- [ ] 결과 분석 항목
+  - **응답 시간 분포**:
+    - p50 (중앙값): < 50ms
+    - p95: < 100ms
+    - p99: < 200ms
+
+  - **처리량 (RPS)**:
+    - 전체 RPS: 목표 > 100
+    - 구매 API RPS: 목표 > 50
+
+  - **에러율**:
+    - 전체 에러율: < 5%
+    - 재고 부족 에러는 정상 (400)
+    - 500 에러는 0%
+
+  - **재고 정합성**:
+    ```bash
+    # 테스트 종료 후 최종 재고 확인
+    docker-compose exec redis redis-cli GET stock:1
+    docker-compose exec redis redis-cli GET stock:2
+    docker-compose exec redis redis-cli GET stock:3
+
+    # SQLite 구매 내역 확인
+    # 총 구매 수량 = 초기 재고 - 최종 재고
+    ```
+
+- [ ] 결과 문서 작성 (`docs/LOAD_TEST_RESULT.md`)
+  ```markdown
+  # 부하 테스트 결과
+
+  ## 테스트 환경
+  - 동시 사용자: 100명
+  - 실행 시간: 60초
+  - 테스트 대상: http://localhost:8000
+
+  ## 결과 요약
+  - 전체 요청: X,XXX
+  - 성공: X,XXX (XX%)
+  - 실패: XXX (X%)
+  - 평균 RPS: XXX
+
+  ## 응답 시간
+  - p50: XX ms
+  - p95: XX ms
+  - p99: XX ms
+
+  ## 재고 정합성
+  - 초기 재고: stock:1=100, stock:2=50, stock:3=200
+  - 최종 재고: stock:1=XX, stock:2=XX, stock:3=XX
+  - 총 구매 건수: XXX
+  - 정합성: ✅ 일치 / ❌ 불일치
+
+  ## 결론
+  - 락 메커니즘이 정상 작동하여 재고 정합성 유지
+  - 목표 성능 달성 여부
+  - 개선 사항
+  \`\`\`
+
+- [ ] 동시성 집중 테스트 (선택적)
+  ```bash
+  # 단일 상품에 집중 구매 요청
+  # 목표: 재고 정합성 100% 검증
+  # 설정:
+  # - 사용자: 50명
+  # - 초기 재고: 100개
+  # - 각 사용자 구매량: 2개
+  # - 기대 결과: 정확히 50건 성공, 나머지 재고 부족
+
+  # Locustfile 수정하여 단일 상품(product_id=1)만 구매하도록 설정
+  # 테스트 후 최종 재고 확인: stock:1 = 0
+  ```
 
 ---
 
@@ -434,14 +933,24 @@ Models → Services → API → Integration Tests
 ## 체크리스트 요약
 
 ### Phase별 완료 체크
-- [ ] Phase 1: 데이터베이스 모델 (Models)
-- [ ] Phase 2: 인증 시스템 (Authentication)
-- [ ] Phase 3: 재고 관리 시스템 (Inventory)
-- [ ] Phase 4: 에러 핸들링
-- [ ] Phase 5: 통합 테스트
-- [ ] Phase 6: 부하 테스트
-- [ ] Phase 7: 문서화 및 배포
-- [ ] Phase 8: 추가 개선 사항 (선택적)
+- [ ] Phase 0: 환경 설정 및 설치 (5개 항목)
+  - uv 설치, 프로젝트 초기화, 의존성 설치, 환경 변수, Docker 확인
+- [ ] Phase 1: 데이터베이스 모델 (Models) (4개 섹션)
+  - 사용자, 상품, 구매 이력 모델, Alembic 마이그레이션
+- [ ] Phase 2: 인증 시스템 (Authentication) (5개 섹션)
+  - 비밀번호 해싱, JWT, 인증 서비스, API 엔드포인트, 라우터 등록
+- [ ] Phase 3: 재고 관리 시스템 (Inventory) (5개 섹션)
+  - Redis 재고 관리 (Lua 스크립트 포함), 상품 서비스, 구매 서비스, API, 라우터 등록
+- [ ] Phase 4: 에러 핸들링 (1개 섹션)
+  - 전역 예외 핸들러, 커스텀 예외
+- [ ] Phase 5: 통합 테스트 및 동시성 테스트 (4개 섹션)
+  - Redis 초기 데이터 설정, 통합 테스트, 수동 테스트, 동시성 테스트
+- [ ] Phase 6: 부하 테스트 (Locust) (2개 섹션)
+  - Locust 시나리오 작성, 부하 테스트 실행 및 결과 분석
+- [ ] Phase 7: 문서화 및 배포 (3개 섹션)
+  - API 문서 개선, 배포 문서, README 업데이트
+- [ ] Phase 8: 추가 개선 사항 (선택적) (4개 섹션)
+  - 로깅, 모니터링, 관리자 기능, Redis Cluster
 
 ### 테스트 커버리지 목표
 - [ ] 전체 테스트 커버리지 > 80%
@@ -503,4 +1012,4 @@ docs: 문서 수정
 ---
 
 **작성일**: 2025-10-22
-**최종 수정일**: 2025-10-22
+**최종 수정일**: 2025-10-22 (Phase 0 추가, Alembic/Lua/Locust 상세 가이드 보강)
