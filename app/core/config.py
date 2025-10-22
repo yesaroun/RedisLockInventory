@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str
     jwt_expiration_minutes: int
 
+    # 데이터베이스 설정
+    database_url: str = "sqlite:///./inventory.db"
+
     # 락 설정
     lock_timeout_seconds: int = 10
     lock_retry_attempts: int = 3
