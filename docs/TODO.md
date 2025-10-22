@@ -140,12 +140,16 @@ Models → Services → API → Integration Tests
   - `name`: String(100), Not Null
   - `description`: Text, Nullable
   - `price`: Integer, Not Null (단위: 원)
+  - `initial_stock`: Integer, Not Null (초기 재고 수량)
   - `created_at`: DateTime, Default=now
 - [ ] 테스트 작성:
   - 상품 생성 테스트
   - 필드 검증 테스트
 
-**참고**: 재고 수량은 Redis에서 관리하므로 SQLite에는 저장하지 않음
+**참고**:
+- **초기 재고**는 SQLite에 저장 (영속성, 감사 추적, 정합성 검증용)
+- **실시간 재고**는 Redis에서 관리 (빠른 조회/업데이트, 분산 락킹)
+- **정합성 공식**: `Redis 현재 재고 = SQLite 초기 재고 - SUM(구매 수량)`
 
 ### 1.3 구매 이력 모델 구현
 **파일**: `app/models/purchase.py`
@@ -334,13 +338,14 @@ Models → Services → API → Integration Tests
 - [ ] InventoryService 클래스 구현
   - `initialize_stock(product_id: int, quantity: int, redis: Redis) -> bool`
     - Redis key: `stock:{product_id}`, value: quantity
+    - **용도**: 상품 생성 시 SQLite의 initial_stock을 Redis에 동기화
     ```python
-    # 재고 초기화
+    # 재고 초기화 (Product.initial_stock → Redis)
     redis.set(f"stock:{product_id}", quantity)
     ```
 
   - `get_stock(product_id: int, redis: Redis) -> int | None`
-    - 재고 수량 조회
+    - Redis에서 실시간 재고 수량 조회
     ```python
     stock = redis.get(f"stock:{product_id}")
     return int(stock) if stock else None
@@ -422,14 +427,19 @@ Models → Services → API → Integration Tests
 **작업 내용**:
 - [ ] ProductService 클래스 구현
   - `create_product(name: str, price: int, initial_stock: int, db: Session, redis: Redis) -> Product`
-    - SQLite에 상품 정보 저장
-    - Redis에 재고 초기화
+    - **SQLite**: Product 레코드 생성 (name, price, initial_stock 저장)
+    - **Redis**: 실시간 재고 초기화 (`stock:{product_id}` = initial_stock)
+    - 트랜잭션 실패 시 Redis 롤백 고려
   - `get_product(product_id: int, db: Session) -> Product | None`
+  - `get_product_with_stock(product_id: int, db: Session, redis: Redis) -> dict`
+    - DB에서 상품 정보 + Redis에서 현재 재고 조회
+    - 반환: `{"product": Product, "current_stock": int}`
   - `list_products(db: Session, skip: int = 0, limit: int = 100) -> list[Product]`
 - [ ] 테스트 작성:
-  - 상품 생성 테스트 (DB + Redis 동시 확인)
+  - 상품 생성 테스트 (DB에 initial_stock 저장, Redis에 동일 값 설정 확인)
   - 상품 조회 테스트
   - 상품 목록 조회 테스트
+  - DB와 Redis 정합성 테스트
 
 ### 3.3 구매 처리 서비스
 **파일**: `app/services/purchase_service.py`
@@ -462,8 +472,10 @@ Models → Services → API → Integration Tests
 **작업 내용**:
 - [ ] Pydantic 스키마 정의 (`app/schemas/inventory.py`)
   - `ProductCreateRequest`: name, price, initial_stock
-  - `ProductResponse`: id, name, price, current_stock, created_at
-  - `StockResponse`: product_id, quantity
+  - `ProductResponse`: id, name, price, initial_stock, current_stock, created_at
+    - `initial_stock`: SQLite에 저장된 초기 재고
+    - `current_stock`: Redis에서 조회한 실시간 재고 (옵션)
+  - `StockResponse`: product_id, current_stock, initial_stock (정합성 확인용)
   - `PurchaseRequest`: product_id, quantity
   - `PurchaseResponse`: id, product_id, quantity, total_price, purchased_at
 - [ ] API 엔드포인트 구현
@@ -526,9 +538,13 @@ Models → Services → API → Integration Tests
   ```python
   # scripts/init_redis.py
   import redis
+  from sqlalchemy.orm import Session
   from app.core.config import get_settings
+  from app.db.database import SessionLocal
+  from app.db.models import Product
 
   def init_redis_data():
+      """SQLite Product.initial_stock을 Redis로 동기화"""
       settings = get_settings()
       r = redis.Redis(
           host=settings.redis_host,
@@ -537,23 +553,30 @@ Models → Services → API → Integration Tests
           decode_responses=True
       )
 
-      # 샘플 상품 재고 설정
-      products = [
-          {"id": 1, "stock": 100},
-          {"id": 2, "stock": 50},
-          {"id": 3, "stock": 200},
-      ]
+      db: Session = SessionLocal()
+      try:
+          # DB에서 모든 상품 조회
+          products = db.query(Product).all()
 
-      for product in products:
-          key = f"stock:{product['id']}"
-          r.set(key, product['stock'])
-          print(f"Set {key} = {product['stock']}")
+          for product in products:
+              key = f"stock:{product.id}"
+              # initial_stock을 Redis에 동기화
+              r.set(key, product.initial_stock)
+              print(f"Set {key} = {product.initial_stock}")
 
-      print("Redis initialization completed!")
+          print(f"Redis initialization completed! ({len(products)} products)")
+      finally:
+          db.close()
 
   if __name__ == "__main__":
       init_redis_data()
   ```
+
+  **중요**: 이 스크립트는 SQLite의 `initial_stock`을 Redis로 동기화합니다.
+  상품 생성 시에도 자동으로 Redis에 재고가 설정되므로, 이 스크립트는 주로 다음 상황에서 사용:
+  - Redis 데이터 손실 후 복구
+  - 새로운 Redis 인스턴스로 마이그레이션
+  - 개발/테스트 환경 초기화
 
 - [ ] 스크립트 실행
   ```bash
@@ -822,8 +845,12 @@ Models → Services → API → Integration Tests
     docker-compose exec redis redis-cli GET stock:2
     docker-compose exec redis redis-cli GET stock:3
 
-    # SQLite 구매 내역 확인
-    # 총 구매 수량 = 초기 재고 - 최종 재고
+    # SQLite 구매 내역 확인 (예시)
+    sqlite3 inventory.db "SELECT product_id, SUM(quantity) FROM purchases GROUP BY product_id"
+
+    # 정합성 검증 공식
+    # Redis 현재 재고 = Product.initial_stock - SUM(Purchase.quantity)
+    # 예: stock:1 = 100 (초기) - 30 (구매 합계) = 70 (현재)
     ```
 
 - [ ] 결과 문서 작성 (`docs/LOAD_TEST_RESULT.md`)
@@ -847,10 +874,21 @@ Models → Services → API → Integration Tests
   - p99: XX ms
 
   ## 재고 정합성
-  - 초기 재고: stock:1=100, stock:2=50, stock:3=200
-  - 최종 재고: stock:1=XX, stock:2=XX, stock:3=XX
-  - 총 구매 건수: XXX
-  - 정합성: ✅ 일치 / ❌ 불일치
+  - **초기 재고** (SQLite Product.initial_stock):
+    - Product 1: 100
+    - Product 2: 50
+    - Product 3: 200
+  - **최종 재고** (Redis):
+    - stock:1 = XX
+    - stock:2 = XX
+    - stock:3 = XX
+  - **구매 합계** (SQLite SUM(Purchase.quantity)):
+    - Product 1: XX개
+    - Product 2: XX개
+    - Product 3: XX개
+  - **검증 결과**:
+    - ✅ 일치: Redis 재고 = 초기 재고 - 구매 합계
+    - ❌ 불일치: 오차 발견 (원인 분석 필요)
 
   ## 결론
   - 락 메커니즘이 정상 작동하여 재고 정합성 유지
@@ -922,8 +960,12 @@ Models → Services → API → Integration Tests
 
 ### 8.3 관리자 기능
 - [ ] 상품 수정/삭제 API
-- [ ] 재고 수동 조정 API
+- [ ] 재고 수동 조정 API (SQLite initial_stock + Redis 동기화)
 - [ ] 전체 구매 이력 조회 API
+- [ ] 재고 정합성 검증 API
+  - 엔드포인트: `GET /api/admin/inventory/verify`
+  - 로직: 모든 상품에 대해 `Redis 재고 == initial_stock - SUM(구매)` 검증
+  - 응답: 불일치 항목 리스트 반환
 
 ### 8.4 Redis Sentinel/Cluster
 - [ ] Redis 고가용성 설정 (프로덕션용)
