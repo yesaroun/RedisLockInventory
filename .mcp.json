@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "./inventory.db"
+      ],
+      "description": "SQLite database server for inventory.db"
+    },
+    "redis": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-redis",
+        "redis://localhost:6379"
+      ],
+      "env": {
+        "REDIS_URL": "redis://localhost:6379"
+      },
+      "description": "Redis server for inventory stock management"
+    }
+  }
+}
