@@ -1,7 +1,5 @@
 """
 User 모델
-
-사용자 계정 정보를 저장하는 SQLAlchemy 모델입니다.
 """
 
 from datetime import datetime
@@ -41,5 +39,4 @@ class User(Base):
         return f"<User(id={self.id}, username='{self.username}')>"
 
     def __str__(self) -> str:
-        """User 객체의 문자열 표현 (사용자 친화적)"""
         return f"User: {self.username}"
