@@ -250,10 +250,10 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/core/test_security.py`
 
 **작업 내용**:
-- [ ] 비밀번호 해싱 함수 구현 (bcrypt)
+- [x] 비밀번호 해싱 함수 구현 (bcrypt)
   - `hash_password(password: str) -> str`
   - `verify_password(plain_password: str, hashed_password: str) -> bool`
-- [ ] 테스트 작성:
+- [x] 테스트 작성:
   - 해싱 동작 테스트
   - 검증 성공/실패 테스트
   - 같은 비밀번호의 다른 해시값 테스트
@@ -264,10 +264,10 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/core/test_security.py` (추가)
 
 **작업 내용**:
-- [ ] JWT 토큰 생성/검증 함수 구현
+- [x] JWT 토큰 생성/검증 함수 구현
   - `create_access_token(data: dict, settings: Settings) -> str`
   - `verify_access_token(token: str, settings: Settings) -> dict`
-- [ ] 테스트 작성:
+- [x] 테스트 작성:
   - 토큰 생성 테스트
   - 토큰 검증 테스트
   - 만료된 토큰 테스트
