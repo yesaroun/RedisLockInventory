@@ -279,11 +279,11 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/services/test_auth_service.py`
 
 **작업 내용**:
-- [ ] AuthService 클래스 구현
+- [x] AuthService 클래스 구현
   - `register_user(username: str, password: str, db: Session) -> User`
   - `authenticate_user(username: str, password: str, db: Session) -> User | None`
   - `get_current_user(token: str, db: Session, settings: Settings) -> User`
-- [ ] 테스트 작성 (TDD):
+- [x] 테스트 작성 (TDD):
   - 회원 가입 성공 테스트
   - 중복 사용자 등록 실패 테스트
   - 로그인 성공 테스트
@@ -297,18 +297,18 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/api/test_auth_api.py`
 
 **작업 내용**:
-- [ ] Pydantic 스키마 정의 (`app/schemas/auth.py`)
+- [x] Pydantic 스키마 정의 (`app/schemas/auth.py`)
   - `UserRegisterRequest`: username, password
   - `UserLoginRequest`: username, password
   - `TokenResponse`: access_token, token_type
   - `UserResponse`: id, username, created_at
-- [ ] API 엔드포인트 구현
+- [x] API 엔드포인트 구현
   - `POST /api/auth/register`: 회원 가입
   - `POST /api/auth/login`: 로그인 (토큰 발급)
   - `GET /api/auth/me`: 현재 사용자 정보 조회 (인증 필요)
-- [ ] 인증 의존성 함수 구현 (`app/api/deps.py`)
+- [x] 인증 의존성 함수 구현 (`app/api/deps.py`)
   - `get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db))`
-- [ ] 테스트 작성 (API 통합 테스트):
+- [x] 테스트 작성 (API 통합 테스트):
   - 회원 가입 성공 (201)
   - 중복 사용자 등록 실패 (409)
   - 로그인 성공 (200, 토큰 반환)

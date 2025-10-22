@@ -4,9 +4,11 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY pyproject.toml uv.lock* ./
+COPY pyproject.toml ./
+COPY uv.lock* ./
 
-RUN uv sync --frozen --no-dev --no-install-project
+# --frozen이 아닌 경우 lock 파일이 없어도 자동 생성
+RUN uv sync --no-dev --no-install-project
 
 FROM python:3.11-slim
 
