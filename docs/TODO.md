@@ -180,7 +180,7 @@ Models → Services → API → Integration Tests
 **파일**: `app/models/__init__.py`, `alembic/`
 
 **작업 내용**:
-- [ ] 모든 모델 import 및 export
+- [x] 모든 모델 import 및 export
   ```python
   # app/models/__init__.py
   from app.db.models import User, Product, Purchase
@@ -188,19 +188,19 @@ Models → Services → API → Integration Tests
   __all__ = ["User", "Product", "Purchase"]
   ```
 
-- [ ] Alembic 마이그레이션 초기 설정
+- [x] Alembic 마이그레이션 초기 설정
   ```bash
   # Alembic 초기화
   uv run alembic init alembic
   ```
 
-- [ ] `alembic.ini` 파일 수정
+- [x] `alembic.ini` 파일 수정
   ```ini
   # alembic.ini에서 sqlalchemy.url 주석 처리 또는 삭제
   # sqlalchemy.url = driver://user:pass@localhost/dbname
   ```
 
-- [ ] `alembic/env.py` 파일 수정
+- [x] `alembic/env.py` 파일 수정
   ```python
   # alembic/env.py
   from app.core.config import get_settings
@@ -215,7 +215,7 @@ Models → Services → API → Integration Tests
   target_metadata = Base.metadata
   ```
 
-- [ ] 초기 마이그레이션 생성 및 적용
+- [x] 초기 마이그레이션 생성 및 적용
   ```bash
   # 첫 번째 마이그레이션 생성 (자동 감지)
   uv run alembic revision --autogenerate -m "Initial tables: users, products, purchases"
@@ -230,7 +230,7 @@ Models → Services → API → Integration Tests
   uv run alembic history
   ```
 
-- [ ] 테이블 생성 검증
+- [x] 테이블 생성 검증
   ```bash
   # SQLite DB 파일 확인
   ls -l inventory.db
@@ -239,10 +239,6 @@ Models → Services → API → Integration Tests
   sqlite3 inventory.db ".tables"
   sqlite3 inventory.db ".schema users"
   ```
-
-**참고**:
-- Alembic은 선택적이며, 간단한 프로젝트는 `Base.metadata.create_all(engine)`으로도 가능
-- 프로덕션 환경에서는 Alembic 사용 권장
 
 ---
 
