@@ -5,18 +5,14 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user
 from app.core.config import Settings, get_settings
 from app.core.security import create_access_token
 from app.services.auth_service import AuthService
-from app.schemas.auth import (
-    UserRegisterRequest,
-    UserLoginRequest,
-    TokenResponse,
-    UserResponse,
-)
+from app.schemas.auth import UserRegisterRequest, TokenResponse, UserResponse
 from app.core.exceptions import UserAlreadyExistsException
 from app.models.user import User
 
@@ -80,15 +76,15 @@ def register(
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    credentials: UserLoginRequest,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     """
-    사용자 로그인 및 JWT 토큰 발급
+    사용자 로그인 및 JWT 토큰 발급 (OAuth2 표준)
 
     Args:
-        credentials: 로그인 정보 (username, password)
+        form_data: OAuth2 폼 데이터 (username, password)
         db: 데이터베이스 세션
         settings: 애플리케이션 설정
 
@@ -99,12 +95,10 @@ def login(
         HTTPException 401: 잘못된 인증 정보
 
     Example:
-        Request:
-        ```json
-        {
-            "username": "john_doe",
-            "password": "securePass123"
-        }
+        Form Data:
+        ```
+        username=john_doe
+        password=securePass123
         ```
 
         Response (200):
@@ -116,8 +110,8 @@ def login(
         ```
     """
     user = AuthService.authenticate_user(
-        username=credentials.username,
-        password=credentials.password,
+        username=form_data.username,
+        password=form_data.password,
         db=db,
     )
 

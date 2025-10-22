@@ -320,7 +320,7 @@ Models → Services → API → Integration Tests
 **파일**: `app/main.py`
 
 **작업 내용**:
-- [ ] auth 라우터 import 및 등록
+- [x] auth 라우터 import 및 등록
   ```python
   from app.api.routes import auth
   app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])

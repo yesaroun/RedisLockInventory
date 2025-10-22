@@ -6,11 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import Settings
 from app.db.redis_client import get_redis_client
 from app.db.database import Base
 from app.main import app
+# 모델을 임포트하여 Base.metadata에 등록 (테이블 생성을 위해 필수)
+from app.models import User, Product, Purchase  # noqa: F401
 
 
 @pytest.fixture(scope="session")
@@ -66,9 +69,11 @@ def test_db() -> Session:
     테스트 종료 후 자동으로 롤백하여 격리를 보장합니다.
     """
     # In-memory SQLite 데이터베이스 엔진 생성
+    # StaticPool을 사용하여 모든 connection이 같은 in-memory DB를 공유하도록 함
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
 
     # 모든 테이블 생성

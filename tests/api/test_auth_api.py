@@ -111,10 +111,10 @@ class TestLoginAPI:
             json={"username": username, "password": password},
         )
 
-        # 로그인 시도
+        # 로그인 시도 (OAuth2 폼 데이터 방식)
         response = test_client.post(
             "/api/auth/login",
-            json={"username": username, "password": password},
+            data={"username": username, "password": password},
         )
 
         # 상태 코드 확인
@@ -142,10 +142,10 @@ class TestLoginAPI:
             json={"username": username, "password": correct_password},
         )
 
-        # 잘못된 비밀번호로 로그인 시도
+        # 잘못된 비밀번호로 로그인 시도 (OAuth2 폼 데이터 방식)
         response = test_client.post(
             "/api/auth/login",
-            json={"username": username, "password": wrong_password},
+            data={"username": username, "password": wrong_password},
         )
 
         # 401 Unauthorized
@@ -156,7 +156,7 @@ class TestLoginAPI:
         """존재하지 않는 사용자 로그인 실패 테스트 (401 Unauthorized)"""
         response = test_client.post(
             "/api/auth/login",
-            json={"username": "nonexistent", "password": "anypassword"},
+            data={"username": "nonexistent", "password": "anypassword"},
         )
 
         # 401 Unauthorized
@@ -179,10 +179,10 @@ class TestGetMeAPI:
         )
         user_id = register_response.json()["id"]
 
-        # 로그인하여 토큰 획득
+        # 로그인하여 토큰 획득 (OAuth2 폼 데이터 방식)
         login_response = test_client.post(
             "/api/auth/login",
-            json={"username": username, "password": password},
+            data={"username": username, "password": password},
         )
         token = login_response.json()["access_token"]
 
