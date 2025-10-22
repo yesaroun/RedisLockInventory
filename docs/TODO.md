@@ -117,14 +117,14 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/models/test_user.py`
 
 **작업 내용**:
-- [ ] User 모델 정의 (SQLAlchemy)
+- [x] User 모델 정의 (SQLAlchemy)
   - `id`: Integer, Primary Key, AutoIncrement
   - `username`: String(50), Unique, Not Null
   - `email`: String(100), Unique, Not Null (선택적)
   - `hashed_password`: String(255), Not Null
   - `created_at`: DateTime, Default=now
   - `updated_at`: DateTime, onupdate=now
-- [ ] 테스트 작성:
+- [x] 테스트 작성:
   - 모델 생성 테스트
   - Unique constraint 테스트
   - 필드 검증 테스트
@@ -135,21 +135,26 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/models/test_product.py`
 
 **작업 내용**:
-- [ ] Product 모델 정의
+- [x] Product 모델 정의
   - `id`: Integer, Primary Key, AutoIncrement
   - `name`: String(100), Not Null
   - `description`: Text, Nullable
   - `price`: Integer, Not Null (단위: 원)
-  - `initial_stock`: Integer, Not Null (초기 재고 수량)
+  - `stock`: Integer, Not Null (현재 재고 수량)
   - `created_at`: DateTime, Default=now
-- [ ] 테스트 작성:
+  - `updated_at`: DateTime, Default=now, onupdate=now
+- [x] 테스트 작성:
   - 상품 생성 테스트
   - 필드 검증 테스트
 
 **참고**:
-- **초기 재고**는 SQLite에 저장 (영속성, 감사 추적, 정합성 검증용)
-- **실시간 재고**는 Redis에서 관리 (빠른 조회/업데이트, 분산 락킹)
-- **정합성 공식**: `Redis 현재 재고 = SQLite 초기 재고 - SUM(구매 수량)`
+- **이중 저장소 전략**: Redis와 SQLite를 함께 사용
+- **SQLite `stock`**: DB에 저장된 현재 재고 (영속성, 감사 추적용)
+- **Redis `stock:{product_id}`**: 실시간 재고 관리 (빠른 조회/업데이트, 분산 락킹)
+- **동기화 전략**:
+  - 매 구매 완료 후 Redis 재고 감소 → DB stock 업데이트 (트랜잭션 내)
+  - Redis 장애 시 DB의 stock 값으로 복구 가능
+- **정합성**: Redis와 DB가 주기적으로 동기화되어 거의 일치 (eventual consistency)
 
 ### 1.3 구매 이력 모델 구현
 **파일**: `app/models/purchase.py`
@@ -157,7 +162,7 @@ Models → Services → API → Integration Tests
 **테스트 파일**: `tests/models/test_purchase.py`
 
 **작업 내용**:
-- [ ] Purchase 모델 정의
+- [x] Purchase 모델 정의
   - `id`: Integer, Primary Key, AutoIncrement
   - `user_id`: Integer, ForeignKey(users.id), Not Null
   - `product_id`: Integer, ForeignKey(products.id), Not Null
@@ -166,7 +171,7 @@ Models → Services → API → Integration Tests
   - `purchased_at`: DateTime, Default=now
   - `user`: relationship with User
   - `product`: relationship with Product
-- [ ] 테스트 작성:
+- [x] 테스트 작성:
   - 구매 기록 생성 테스트
   - Relationship 테스트
   - Foreign key constraint 테스트
@@ -338,9 +343,9 @@ Models → Services → API → Integration Tests
 - [ ] InventoryService 클래스 구현
   - `initialize_stock(product_id: int, quantity: int, redis: Redis) -> bool`
     - Redis key: `stock:{product_id}`, value: quantity
-    - **용도**: 상품 생성 시 SQLite의 initial_stock을 Redis에 동기화
+    - **용도**: 상품 생성 시 SQLite의 stock을 Redis에 동기화
     ```python
-    # 재고 초기화 (Product.initial_stock → Redis)
+    # 재고 초기화 (Product.stock → Redis)
     redis.set(f"stock:{product_id}", quantity)
     ```
 
@@ -426,20 +431,23 @@ Models → Services → API → Integration Tests
 
 **작업 내용**:
 - [ ] ProductService 클래스 구현
-  - `create_product(name: str, price: int, initial_stock: int, db: Session, redis: Redis) -> Product`
-    - **SQLite**: Product 레코드 생성 (name, price, initial_stock 저장)
-    - **Redis**: 실시간 재고 초기화 (`stock:{product_id}` = initial_stock)
+  - `create_product(name: str, price: int, stock: int, db: Session, redis: Redis) -> Product`
+    - **SQLite**: Product 레코드 생성 (name, price, stock 저장)
+    - **Redis**: 실시간 재고 초기화 (`stock:{product_id}` = stock)
     - 트랜잭션 실패 시 Redis 롤백 고려
   - `get_product(product_id: int, db: Session) -> Product | None`
   - `get_product_with_stock(product_id: int, db: Session, redis: Redis) -> dict`
-    - DB에서 상품 정보 + Redis에서 현재 재고 조회
-    - 반환: `{"product": Product, "current_stock": int}`
+    - DB에서 상품 정보 조회 (DB의 stock 포함)
+    - Redis에서 실시간 재고 조회
+    - 반환: `{"product": Product, "db_stock": int, "redis_stock": int}`
   - `list_products(db: Session, skip: int = 0, limit: int = 100) -> list[Product]`
+  - `sync_stock_to_db(product_id: int, redis_stock: int, db: Session) -> bool`
+    - Redis의 재고를 DB에 동기화 (구매 완료 후 호출)
 - [ ] 테스트 작성:
-  - 상품 생성 테스트 (DB에 initial_stock 저장, Redis에 동일 값 설정 확인)
+  - 상품 생성 테스트 (DB에 stock 저장, Redis에 동일 값 설정 확인)
   - 상품 조회 테스트
   - 상품 목록 조회 테스트
-  - DB와 Redis 정합성 테스트
+  - DB와 Redis 동기화 테스트
 
 ### 3.3 구매 처리 서비스
 **파일**: `app/services/purchase_service.py`
@@ -449,20 +457,24 @@ Models → Services → API → Integration Tests
 **작업 내용**:
 - [ ] PurchaseService 클래스 구현
   - `purchase_product(user_id: int, product_id: int, quantity: int, db: Session, redis: Redis, settings: Settings) -> Purchase`
-    - 상품 존재 확인
-    - 비관적 락으로 재고 감소 시도
-    - 성공 시 Purchase 기록 생성 (SQLite)
+    - 상품 존재 확인 (DB에서 조회)
+    - 비관적 락으로 Redis 재고 감소 시도
+    - 성공 시:
+      1. Purchase 기록 생성 (SQLite)
+      2. DB의 Product.stock 업데이트 (동기화)
+      3. 모두 트랜잭션으로 처리
     - 실패 시 적절한 예외 발생
   - 커스텀 예외 정의 (`app/core/exceptions.py`)
     - `ProductNotFoundException`
     - `InsufficientStockException`
     - `LockAcquisitionException`
 - [ ] 테스트 작성 (TDD):
-  - 정상 구매 성공 테스트
+  - 정상 구매 성공 테스트 (Redis + DB 모두 감소 확인)
   - 존재하지 않는 상품 구매 실패
   - 재고 부족 구매 실패
   - 락 획득 실패 테스트
   - 동시 구매 요청 시나리오 (멀티스레드 테스트)
+  - DB와 Redis 재고 동기화 검증
 
 ### 3.4 재고 API 엔드포인트
 **파일**: `app/api/routes/inventory.py`
@@ -471,11 +483,11 @@ Models → Services → API → Integration Tests
 
 **작업 내용**:
 - [ ] Pydantic 스키마 정의 (`app/schemas/inventory.py`)
-  - `ProductCreateRequest`: name, price, initial_stock
-  - `ProductResponse`: id, name, price, initial_stock, current_stock, created_at
-    - `initial_stock`: SQLite에 저장된 초기 재고
-    - `current_stock`: Redis에서 조회한 실시간 재고 (옵션)
-  - `StockResponse`: product_id, current_stock, initial_stock (정합성 확인용)
+  - `ProductCreateRequest`: name, price, stock
+  - `ProductResponse`: id, name, price, stock, redis_stock, created_at, updated_at
+    - `stock`: SQLite에 저장된 현재 재고
+    - `redis_stock`: Redis에서 조회한 실시간 재고 (옵션)
+  - `StockResponse`: product_id, db_stock, redis_stock, synced (정합성 확인용)
   - `PurchaseRequest`: product_id, quantity
   - `PurchaseResponse`: id, product_id, quantity, total_price, purchased_at
 - [ ] API 엔드포인트 구현
@@ -544,7 +556,7 @@ Models → Services → API → Integration Tests
   from app.db.models import Product
 
   def init_redis_data():
-      """SQLite Product.initial_stock을 Redis로 동기화"""
+      """SQLite Product.stock을 Redis로 동기화"""
       settings = get_settings()
       r = redis.Redis(
           host=settings.redis_host,
@@ -560,9 +572,9 @@ Models → Services → API → Integration Tests
 
           for product in products:
               key = f"stock:{product.id}"
-              # initial_stock을 Redis에 동기화
-              r.set(key, product.initial_stock)
-              print(f"Set {key} = {product.initial_stock}")
+              # DB의 stock을 Redis에 동기화
+              r.set(key, product.stock)
+              print(f"Set {key} = {product.stock}")
 
           print(f"Redis initialization completed! ({len(products)} products)")
       finally:
@@ -572,11 +584,12 @@ Models → Services → API → Integration Tests
       init_redis_data()
   ```
 
-  **중요**: 이 스크립트는 SQLite의 `initial_stock`을 Redis로 동기화합니다.
+  **중요**: 이 스크립트는 SQLite의 `stock`을 Redis로 동기화합니다.
   상품 생성 시에도 자동으로 Redis에 재고가 설정되므로, 이 스크립트는 주로 다음 상황에서 사용:
-  - Redis 데이터 손실 후 복구
+  - Redis 데이터 손실 후 복구 (DB의 stock을 기준으로)
   - 새로운 Redis 인스턴스로 마이그레이션
   - 개발/테스트 환경 초기화
+  - 서버 재시작 시 Redis 재고 복원
 
 - [ ] 스크립트 실행
   ```bash
@@ -651,13 +664,13 @@ Models → Services → API → Integration Tests
        {
          "name": "MacBook Pro",
          "price": 2500000,
-         "initial_stock": 10
+         "stock": 10
        }
        ```
        - 예상 응답: 201 Created, `product_id` 반환
 
     4. **재고 조회**: `GET /api/products/{product_id}/stock`
-       - 예상 응답: 200 OK, `quantity: 10`
+       - 예상 응답: 200 OK, `db_stock: 10, redis_stock: 10, synced: true`
 
     5. **구매**: `POST /api/purchases`
        ```json
@@ -669,7 +682,8 @@ Models → Services → API → Integration Tests
        - 예상 응답: 200 OK
 
     6. **재고 재조회**: `GET /api/products/{product_id}/stock`
-       - 예상 응답: 200 OK, `quantity: 8` (10 - 2)
+       - 예상 응답: 200 OK, `db_stock: 8, redis_stock: 8, synced: true` (10 - 2)
+       - DB와 Redis 재고가 모두 동기화되어 감소했는지 확인
 
     7. **구매 이력 조회**: `GET /api/purchases/me`
        - 예상 응답: 200 OK, 구매 내역 목록
@@ -874,20 +888,20 @@ Models → Services → API → Integration Tests
   - p99: XX ms
 
   ## 재고 정합성
-  - **초기 재고** (SQLite Product.initial_stock):
+  - **테스트 시작 재고** (SQLite Product.stock, 테스트 전):
     - Product 1: 100
     - Product 2: 50
     - Product 3: 200
-  - **최종 재고** (Redis):
-    - stock:1 = XX
-    - stock:2 = XX
-    - stock:3 = XX
+  - **최종 재고** (테스트 후):
+    - **Redis**: stock:1 = XX, stock:2 = XX, stock:3 = XX
+    - **DB**: Product 1 stock = XX, Product 2 stock = XX, Product 3 stock = XX
   - **구매 합계** (SQLite SUM(Purchase.quantity)):
     - Product 1: XX개
     - Product 2: XX개
     - Product 3: XX개
   - **검증 결과**:
-    - ✅ 일치: Redis 재고 = 초기 재고 - 구매 합계
+    - ✅ Redis와 DB 동기화: Redis 재고 == DB stock
+    - ✅ 정합성: DB stock = 시작 재고 - 구매 합계
     - ❌ 불일치: 오차 발견 (원인 분석 필요)
 
   ## 결론
@@ -960,11 +974,14 @@ Models → Services → API → Integration Tests
 
 ### 8.3 관리자 기능
 - [ ] 상품 수정/삭제 API
-- [ ] 재고 수동 조정 API (SQLite initial_stock + Redis 동기화)
+- [ ] 재고 수동 조정 API (SQLite stock + Redis 동기화)
+  - DB stock 업데이트 → Redis 동기화
+  - 또는 Redis 업데이트 → DB 동기화
 - [ ] 전체 구매 이력 조회 API
 - [ ] 재고 정합성 검증 API
   - 엔드포인트: `GET /api/admin/inventory/verify`
-  - 로직: 모든 상품에 대해 `Redis 재고 == initial_stock - SUM(구매)` 검증
+  - 로직: 모든 상품에 대해 `Redis 재고 == DB stock` 검증
+  - 추가 검증: `DB stock == 초기값 - SUM(구매)` (히스토리 기반)
   - 응답: 불일치 항목 리스트 반환
 
 ### 8.4 Redis Sentinel/Cluster
