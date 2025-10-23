@@ -15,7 +15,10 @@ class InventoryService:
     @staticmethod
     def initialize_stock(product_id: int, quantity: int, redis: Redis) -> bool:
         """
-        Redis에 재고를 초기화합니다.
+        Redis에 재고를 초기화합니다 (키가 없을 때만).
+
+        SETNX를 사용하여 키가 이미 존재하면 덮어쓰지 않습니다.
+        이는 여러 Pod에서 동시에 초기화를 시도할 때 안전성을 보장합니다.
 
         Args:
             product_id: 상품 ID
@@ -23,10 +26,12 @@ class InventoryService:
             redis: Redis 클라이언트
 
         Returns:
-            성공 시 True
+            성공 시 True (재고 초기화됨), 이미 존재하면 False
         """
-        redis.set(f"stock:{product_id}", quantity)
-        return True
+        stock_key = f"stock:{product_id}"
+        # NX 옵션: 키가 없을 때만 설정 (SETNX)
+        result = redis.set(stock_key, quantity, nx=True)
+        return bool(result)
 
     @staticmethod
     def get_stock(product_id: int, redis: Redis) -> Optional[int]:

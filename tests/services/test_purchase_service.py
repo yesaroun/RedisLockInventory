@@ -31,7 +31,9 @@ def sample_user(test_db: Session) -> User:
 
 
 @pytest.fixture
-def sample_product(test_db: Session, redis_client: Redis) -> Product:
+def sample_product(
+    test_db: Session, redis_client: Redis, settings: Settings
+) -> Product:
     """테스트용 샘플 상품 생성 (DB + Redis)"""
     product = ProductService.create_product(
         name="MacBook Pro",
@@ -40,6 +42,7 @@ def sample_product(test_db: Session, redis_client: Redis) -> Product:
         stock=100,
         db=test_db,
         redis=redis_client,
+        settings=settings,
     )
     return product
 
@@ -153,6 +156,7 @@ class TestPurchaseProduct:
             stock=0,
             db=test_db,
             redis=redis_client,
+            settings=settings,
         )
 
         with pytest.raises(InsufficientStockException) as exc_info:
@@ -264,6 +268,7 @@ class TestConcurrentPurchase:
             stock=50,
             db=test_db,
             redis=redis_client,
+            settings=settings,
         )
 
         # 100번 구매 시도 (각 1개씩)
@@ -314,6 +319,7 @@ class TestConcurrentPurchase:
             stock=50,
             db=test_db,
             redis=redis_client,
+            settings=settings,
         )
         # 다른 세션에서도 볼 수 있도록 커밋
         test_db.commit()
@@ -402,6 +408,7 @@ class TestConcurrentPurchase:
             stock=100,
             db=test_db,
             redis=redis_client,
+            settings=settings,
         )
         # 다른 세션에서도 볼 수 있도록 커밋
         test_db.commit()

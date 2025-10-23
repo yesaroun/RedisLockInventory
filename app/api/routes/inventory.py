@@ -42,7 +42,7 @@ def create_product(
     product_data: ProductCreateRequest,
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis_client),
-    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ):
     """
     새 상품을 생성합니다 (인증 필요).
@@ -51,7 +51,7 @@ def create_product(
         product_data: 상품 생성 정보 (name, price, stock)
         db: 데이터베이스 세션
         redis: Redis 클라이언트
-        current_user: 현재 인증된 사용자
+        settings: 애플리케이션 설정
 
     Returns:
         ProductResponse: 생성된 상품 정보
@@ -85,6 +85,7 @@ def create_product(
         stock=product_data.stock,
         db=db,
         redis=redis,
+        settings=settings,
     )
     return product
 
