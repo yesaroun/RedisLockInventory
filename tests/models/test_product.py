@@ -38,7 +38,7 @@ class TestProductModel:
             name="MacBook Pro",
             description="Apple M3 Pro 칩, 16GB RAM, 512GB SSD",
             price=2500000,
-            initial_stock=10,
+            stock=10,
         )
         db_session.add(product)
         db_session.commit()
@@ -48,7 +48,7 @@ class TestProductModel:
         assert product.name == "MacBook Pro"
         assert product.description == "Apple M3 Pro 칩, 16GB RAM, 512GB SSD"
         assert product.price == 2500000
-        assert product.initial_stock == 10
+        assert product.stock == 10
         assert isinstance(product.created_at, datetime)
 
     def test_create_product_without_description(self, db_session):
@@ -56,7 +56,7 @@ class TestProductModel:
         product = Product(
             name="iPhone 15",
             price=1200000,
-            initial_stock=50,
+            stock=50,
         )
         db_session.add(product)
         db_session.commit()
@@ -66,13 +66,13 @@ class TestProductModel:
         assert product.name == "iPhone 15"
         assert product.description is None
         assert product.price == 1200000
-        assert product.initial_stock == 50
+        assert product.stock == 50
 
     def test_name_not_null(self, db_session):
         """name이 NULL일 수 없음을 테스트"""
         product = Product(
             price=1000000,
-            initial_stock=10,
+            stock=10,
         )
         db_session.add(product)
 
@@ -83,15 +83,15 @@ class TestProductModel:
         """price가 NULL일 수 없음을 테스트"""
         product = Product(
             name="Test Product",
-            initial_stock=10,
+            stock=10,
         )
         db_session.add(product)
 
         with pytest.raises(IntegrityError):
             db_session.commit()
 
-    def test_initial_stock_not_null(self, db_session):
-        """initial_stock이 NULL일 수 없음을 테스트"""
+    def test_stock_not_null(self, db_session):
+        """stock이 NULL일 수 없음을 테스트"""
         product = Product(
             name="Test Product",
             price=1000000,
@@ -108,7 +108,7 @@ class TestProductModel:
         product = Product(
             name="Test Product",
             price=1000000,
-            initial_stock=10,
+            stock=10,
         )
         db_session.add(product)
         db_session.commit()
@@ -124,7 +124,7 @@ class TestProductModel:
         product = Product(
             name="MacBook Pro",
             price=2500000,
-            initial_stock=10,
+            stock=10,
         )
         db_session.add(product)
         db_session.commit()
@@ -138,7 +138,7 @@ class TestProductModel:
         product = Product(
             name="Test Product",
             price=1500000,
-            initial_stock=5,
+            stock=5,
         )
         db_session.add(product)
         db_session.commit()
@@ -147,16 +147,16 @@ class TestProductModel:
         assert isinstance(product.price, int)
         assert product.price == 1500000
 
-    def test_initial_stock_is_integer(self, db_session):
-        """initial_stock이 정수형으로 저장되는지 테스트"""
+    def test_stock_is_integer(self, db_session):
+        """stock이 정수형으로 저장되는지 테스트"""
         product = Product(
             name="Test Product",
             price=1000000,
-            initial_stock=100,
+            stock=100,
         )
         db_session.add(product)
         db_session.commit()
         db_session.refresh(product)
 
-        assert isinstance(product.initial_stock, int)
-        assert product.initial_stock == 100
+        assert isinstance(product.stock, int)
+        assert product.stock == 100

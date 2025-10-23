@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import Settings
-from app.db.redis_client import get_redis_client
+from app.db.redis_client import create_redis_client
 from app.db.database import Base
 from app.main import app
 # 모델을 임포트하여 Base.metadata에 등록 (테이블 생성을 위해 필수)
@@ -41,7 +41,7 @@ def redis_client(settings):
     각 테스트 함수마다 새로운 Redis 연결을 생성하고,
     테스트 종료 후 데이터를 정리합니다.
     """
-    client = get_redis_client(settings)
+    client = create_redis_client(settings)
 
     # 테스트 시작 전 DB 비우기 (테스트 DB만 비움)
     client.flushdb()

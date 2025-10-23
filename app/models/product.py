@@ -16,8 +16,9 @@ class Product(Base):
         name: 상품명 (Not Null)
         description: 상품 설명 (Nullable)
         price: 가격 (Not Null, 단위: 원)
-        initial_stock: 초기 재고 수량 (Not Null)
+        stock: 현재 재고 수량 (Not Null) - DB에 저장된 재고, Redis와 동기화
         created_at: 생성 일시 (자동 설정)
+        updated_at: 수정 일시 (자동 업데이트)
     """
 
     __tablename__ = "products"
@@ -26,8 +27,11 @@ class Product(Base):
     name = Column(String(100), nullable=False, index=True)
     description = Column(Text, nullable=True)
     price = Column(Integer, nullable=False)
-    initial_stock = Column(Integer, nullable=False)
+    stock = Column(Integer, nullable=False)  # 현재 재고 (Redis와 동기화)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
     def __repr__(self) -> str:
         """Product 객체의 문자열 표현"""
