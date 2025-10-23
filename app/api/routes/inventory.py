@@ -132,7 +132,7 @@ def get_product(
     current_user: User = Depends(get_current_user),
 ):
     """
-    특정 상품의 상세 정보를 조회합니다 (인증 필요).
+    특정 상품의 상세 정보를 조회합니다.
 
     Args:
         product_id: 조회할 상품 ID
@@ -203,9 +203,7 @@ def get_stock(
         }
         ```
     """
-    # DB에서 상품 조회
     product = ProductService.get_product(product_id, db)
-
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -214,7 +212,6 @@ def get_stock(
 
     # Redis에서 재고 조회
     redis_stock = InventoryService.get_stock(product_id, redis)
-
     # 동기화 상태 확인
     synced = redis_stock == product.stock if redis_stock is not None else False
 

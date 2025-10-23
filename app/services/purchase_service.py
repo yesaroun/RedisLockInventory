@@ -58,12 +58,10 @@ class PurchaseService:
             InsufficientStockException: 재고가 부족한 경우
             LockAcquisitionException: 락 획득에 실패한 경우 (재시도 초과)
         """
-        # 1. 상품 존재 확인 (DB에서 조회)
         product = ProductService.get_product(product_id, db)
         if product is None:
             raise ProductNotFoundException(product_id)
 
-        # 2. Redis 비관적 락으로 재고 감소 시도
         stock_decreased = InventoryService.decrease_stock(
             product_id, quantity, redis, settings
         )
