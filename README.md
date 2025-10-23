@@ -25,7 +25,7 @@
     - PyJWT: JWT 토큰 처리.
     - pydantic: 데이터 유효성 검사.
     - uvicorn: FastAPI 서버 실행.
-- **테스트 도구**: pytest (단위/통합 테스트), Locust (부하 테스트, 다중 사용자 시뮬레이션).
+- **테스트 도구**: pytest (단위/통합 테스트)
 - **기타**: Docker (배포 용도).
 
 ## 설치 방법
@@ -99,19 +99,3 @@ pip install uv
   # 상세 출력
   uv run pytest -v
   ```
-- **부하 테스트**:
-  ```bash
-  # Locust 실행
-  uv run locust -f load_tests/locustfile.py
-  ```
-- **커버리지 확인**:
-  ```bash
-  uv run pytest --cov=app --cov-report=html
-  ```
-
-## 보안 고려사항
-
-- 비밀번호는 해싱(bcrypt)하여 저장.
-- JWT 토큰 만료 시간 설정(30분).
-- 프로덕션 환경에서는 HTTPS 적용 및 Redis 인증 활성화.
-

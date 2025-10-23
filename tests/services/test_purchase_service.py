@@ -7,6 +7,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 from redis import Redis
 from sqlalchemy.orm import Session
+from unittest.mock import patch
 
 from app.core.config import Settings
 from app.core.exceptions import (
@@ -564,11 +565,50 @@ class TestPurchaseRollback:
         sample_user: User,
         sample_product: Product,
     ):
-        """Test: DB 에러 발생 시 Redis 재고도 롤백되어야 함 (현재 구현에서는 롤백 불가능)"""
-        # NOTE: 현재 구현에서는 Redis 재고 감소 후 DB 에러 시 롤백이 자동으로 되지 않음
-        # 이는 향후 개선 사항 (예: Redis 트랜잭션, Saga 패턴 등)
-        # 이 테스트는 현재 동작을 문서화하기 위한 것
+        """Test: DB 트랜잭션 실패 시 Redis 재고가 롤백되는지 검증"""
+        initial_stock = sample_product.stock
+        quantity = 5
 
-        # 이 테스트는 실제 롤백 구현 후에 작성 예정
-        # 현재는 skip
-        pytest.skip("Redis rollback not implemented yet")
+        # Redis에서도 초기 재고 확인
+        initial_redis_stock = InventoryService.get_stock(
+            sample_product.id, redis_client
+        )
+        assert initial_redis_stock == initial_stock
+
+        # db.commit()이 예외를 발생시키도록 mock 설정
+        with patch.object(test_db, "commit", side_effect=Exception("DB commit failed")):
+            # 구매 시도 - DB 커밋 실패로 예외 발생
+            with pytest.raises(Exception) as exc_info:
+                PurchaseService.purchase_product(
+                    user_id=sample_user.id,
+                    product_id=sample_product.id,
+                    quantity=quantity,
+                    db=test_db,
+                    redis=redis_client,
+                    settings=settings,
+                )
+
+            assert "DB commit failed" in str(exc_info.value)
+
+        # 검증 1: Redis 재고가 원래 값으로 롤백되었는지 확인
+        final_redis_stock = InventoryService.get_stock(
+            sample_product.id, redis_client
+        )
+        assert (
+            final_redis_stock == initial_redis_stock
+        ), f"Redis 재고가 롤백되지 않음: {final_redis_stock} != {initial_redis_stock}"
+
+        # 검증 2: DB 재고는 변경되지 않았는지 확인 (롤백됨)
+        test_db.refresh(sample_product)
+        assert sample_product.stock == initial_stock
+
+        # 검증 3: Purchase 레코드가 생성되지 않았는지 확인
+        purchases = (
+            test_db.query(Purchase)
+            .filter(
+                Purchase.user_id == sample_user.id,
+                Purchase.product_id == sample_product.id,
+            )
+            .all()
+        )
+        assert len(purchases) == 0, "DB 롤백 후 Purchase 레코드가 남아있음"

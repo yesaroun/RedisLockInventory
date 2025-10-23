@@ -62,6 +62,9 @@ class PurchaseService:
         if product is None:
             raise ProductNotFoundException(product_id)
 
+        # 재고 감소 전에 원래 재고를 저장 (롤백 시 사용)
+        original_stock = InventoryService.get_stock(product_id, redis)
+
         stock_decreased = InventoryService.decrease_stock(
             product_id, quantity, redis, settings
         )
@@ -110,16 +113,16 @@ class PurchaseService:
             # DB 트랜잭션 실패 시 롤백
             db.rollback()
 
-            # TODO: Redis 재고도 롤백해야 함 (현재는 롤백 미구현)
-            # 향후 개선: Redis 트랜잭션, Saga 패턴, 보상 트랜잭션 등
-            # 임시 조치: 재고 복구 시도
-            try:
-                InventoryService.initialize_stock(
-                    product_id, current_redis_stock + quantity, redis
-                )
-            except Exception:
-                # 재고 복구 실패 시 로깅 필요 (현재는 무시)
-                pass
+            # Redis 재고 롤백: 원래 재고로 복원
+            # 주의: 완벽한 분산 트랜잭션이 아니며, 재고 감소와 롤백 사이에
+            # 다른 프로세스의 구매가 끼어들 수 있음 (타이밍 이슈)
+            # 더 안전한 방법: Saga 패턴, 2PC, 보상 트랜잭션 등
+            if original_stock is not None:
+                try:
+                    redis.set(f"stock:{product_id}", original_stock)
+                except Exception:
+                    # Redis 롤백 실패 시 재고 불일치 발생
+                    pass
 
             # 원래 예외를 다시 발생시킴
             raise e

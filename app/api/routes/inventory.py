@@ -43,6 +43,7 @@ def create_product(
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis_client),
     settings: Settings = Depends(get_settings),
+    current_user: User = Depends(get_current_user),
 ):
     """
     새 상품을 생성합니다 (인증 필요).
