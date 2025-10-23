@@ -59,7 +59,7 @@ def sample_product(db_session):
     product = Product(
         name="MacBook Pro",
         price=2500000,
-        initial_stock=10,
+        stock=10,
     )
     db_session.add(product)
     db_session.commit()
