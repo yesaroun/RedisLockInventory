@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.database import get_db
+from app.db.redis_client import get_redis_client
 from app.services.auth_service import AuthService
 from app.models.user import User
 from app.core.exceptions import InvalidCredentialsException, UserNotFoundException
