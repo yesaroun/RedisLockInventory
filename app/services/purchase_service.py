@@ -120,6 +120,8 @@ class PurchaseService:
             if original_stock is not None:
                 try:
                     redis.set(f"stock:{product_id}", original_stock)
+                    # 이 방식보다는 감소시킨 양만큼 다시 증가시키는게 적절하다 왜냐하면 다른 프로세스에서 감소한만큼은 유지해야함(set보다는 increment 함수를 써야함) -> 이런걸 saga 패턴이라고함
+                    # 이러한 테스트 케이스도 만들어보면 좋을듯하다.
                 except Exception:
                     # Redis 롤백 실패 시 재고 불일치 발생
                     pass
