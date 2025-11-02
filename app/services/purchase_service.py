@@ -13,7 +13,7 @@ from app.core.exceptions import (
     InsufficientStockException,
     LockAcquisitionException,
 )
-from app.models import Purchase, Product
+from app.models import Purchase
 from app.services.inventory_service import InventoryService
 from app.services.product_service import ProductService
 
