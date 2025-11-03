@@ -28,10 +28,10 @@ COPY main.py ./
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-EXPOSE 8000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=2)" || exit 1
+  CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=2)" || exit 1
 
 # entrypoint 스크립트 복사 및 실행 권한 설정
 COPY docker-entrypoint.sh ./

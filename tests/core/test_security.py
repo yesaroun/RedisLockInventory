@@ -73,7 +73,7 @@ class TestJWTToken:
         """테스트용 설정 픽스처"""
         return Settings(
             redis_host="localhost",
-            redis_port=6379,
+            redis_port=6380,
             redis_db=0,
             redis_password="",
             jwt_secret_key="test_secret_key_for_testing",

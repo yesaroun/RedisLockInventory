@@ -21,7 +21,7 @@ def settings():
     """테스트용 설정 객체 픽스처"""
     return Settings(
         redis_host="localhost",
-        redis_port=6379,
+        redis_port=6380,
         redis_db=1,  # 테스트용 DB 프로덕션과 분리
         redis_password="",
         jwt_secret_key="test-secret-key-for-testing",

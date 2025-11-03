@@ -12,4 +12,4 @@ echo "Migrations completed successfully!"
 echo "Starting FastAPI server..."
 
 # exec를 사용하여 PID 1로 uvicorn 실행 (신호 처리를 위해 중요)
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+exec uvicorn app.main:app --host 0.0.0.0 --port 8080

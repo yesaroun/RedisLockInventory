@@ -94,7 +94,7 @@ pip install uv
    ```
 
 4. **Swagger UI 확인**
-    - 브라우저에서 `http://localhost:8000/docs` 접속
+    - 브라우저에서 `http://localhost:8080/docs` 접속
 
 5. **종료 및 정리**
    ```bash
