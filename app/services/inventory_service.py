@@ -49,6 +49,29 @@ class InventoryService:
         return int(stock) if stock else None
 
     @staticmethod
+    def increase_stock(product_id: int, quantity: int, redis: Redis) -> bool:
+        """
+        재고를 증가시킵니다.
+
+        Saga 패턴의 보상 트랜잭션으로 사용됩니다.
+        DB 트랜잭션 실패 시 감소시킨 재고를 복구할 때 사용합니다.
+
+        Args:
+            product_id: 상품 ID
+            quantity: 증가시킬 수량
+            redis: Redis 클라이언트
+
+        Returns:
+            성공 시 True, 키가 없으면 False
+        """
+        stock_key = f"stock:{product_id}"
+        try:
+            redis.incrby(stock_key, quantity)
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
     def _get_lock_key(product_id: int) -> str:
         """
         상품의 락 키를 생성합니다.

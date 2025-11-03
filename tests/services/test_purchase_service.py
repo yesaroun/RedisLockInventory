@@ -327,6 +327,7 @@ class TestConcurrentPurchase:
 
         # 동시 테스트를 위한 세션 팩토리 (test_db와 같은 engine 사용)
         from sqlalchemy.orm import sessionmaker
+
         TestSessionLocal = sessionmaker(
             autocommit=False, autoflush=False, bind=test_db.get_bind()
         )
@@ -383,7 +384,9 @@ class TestConcurrentPurchase:
         assert product.stock == 0
 
         # Purchase 레코드 수 확인
-        purchases = test_db.query(Purchase).filter(Purchase.product_id == product.id).all()
+        purchases = (
+            test_db.query(Purchase).filter(Purchase.product_id == product.id).all()
+        )
         assert len(purchases) == 50
 
         # Purchase 레코드의 총 수량 확인
@@ -416,6 +419,7 @@ class TestConcurrentPurchase:
 
         # 동시 테스트를 위한 세션 팩토리 (test_db와 같은 engine 사용)
         from sqlalchemy.orm import sessionmaker
+
         TestSessionLocal = sessionmaker(
             autocommit=False, autoflush=False, bind=test_db.get_bind()
         )
@@ -449,7 +453,9 @@ class TestConcurrentPurchase:
         # 작은 수의 worker로 제한 (SQLite in-memory 제약)
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = [
-                executor.submit(purchase_varying_quantity, sample_user.id, product.id, qty)
+                executor.submit(
+                    purchase_varying_quantity, sample_user.id, product.id, qty
+                )
                 for qty in quantities
             ]
             results = [future.result() for future in futures]
@@ -591,9 +597,7 @@ class TestPurchaseRollback:
             assert "DB commit failed" in str(exc_info.value)
 
         # 검증 1: Redis 재고가 원래 값으로 롤백되었는지 확인
-        final_redis_stock = InventoryService.get_stock(
-            sample_product.id, redis_client
-        )
+        final_redis_stock = InventoryService.get_stock(sample_product.id, redis_client)
         assert (
             final_redis_stock == initial_redis_stock
         ), f"Redis 재고가 롤백되지 않음: {final_redis_stock} != {initial_redis_stock}"
@@ -612,3 +616,79 @@ class TestPurchaseRollback:
             .all()
         )
         assert len(purchases) == 0, "DB 롤백 후 Purchase 레코드가 남아있음"
+
+    def test_rollback_with_concurrent_decrease(
+        self,
+        test_db: Session,
+        redis_client: Redis,
+        settings: Settings,
+        sample_user: User,
+        sample_product: Product,
+    ):
+        """
+        Test: Saga 패턴 보상 트랜잭션 검증 - 롤백 중 다른 프로세스의 재고 변경 보존
+
+        시나리오:
+        1. 프로세스 A가 재고 10개 감소 시도
+        2. DB 커밋 실패로 롤백 필요
+        3. 롤백 중간에 프로세스 B가 재고 3개 감소 성공
+        4. 프로세스 A의 보상 트랜잭션(increase_stock) 실행
+        5. 최종 재고 = 초기 재고 - 3 (B의 변경만 반영)
+
+        기대 결과:
+        - INCRBY 방식: 프로세스 B의 변경 보존됨 (통과)
+        - SET 방식: 프로세스 B의 변경 손실됨 (실패)
+        """
+        initial_stock = sample_product.stock  # 예: 100
+        process_a_quantity = 10
+        process_b_quantity = 3
+
+        # 초기 Redis 재고 확인
+        initial_redis_stock = InventoryService.get_stock(
+            sample_product.id, redis_client
+        )
+        assert initial_redis_stock == initial_stock
+
+        # Mock을 사용하여 커밋 중간에 다른 프로세스의 감소를 시뮬레이션
+        original_commit = test_db.commit
+
+        def commit_with_concurrent_decrease():
+            # DB 커밋 전에 프로세스 B가 재고 감소
+            success = InventoryService.decrease_stock(
+                sample_product.id, process_b_quantity, redis_client, settings
+            )
+            assert success, "프로세스 B의 재고 감소 실패"
+
+            # 그 후 DB 커밋 실패 발생
+            raise Exception("DB commit failed after concurrent decrease")
+
+        # 프로세스 A: 구매 시도 (DB 커밋 실패)
+        with patch.object(
+            test_db, "commit", side_effect=commit_with_concurrent_decrease
+        ):
+            with pytest.raises(Exception) as exc_info:
+                PurchaseService.purchase_product(
+                    user_id=sample_user.id,
+                    product_id=sample_product.id,
+                    quantity=process_a_quantity,
+                    db=test_db,
+                    redis=redis_client,
+                    settings=settings,
+                )
+
+            assert "DB commit failed" in str(exc_info.value)
+
+        # 검증: 최종 Redis 재고
+        # 프로세스 A는 롤백되고, 프로세스 B만 반영되어야 함
+        final_redis_stock = InventoryService.get_stock(sample_product.id, redis_client)
+        expected_stock = initial_stock - process_b_quantity  # 100 - 3 = 97
+
+        assert final_redis_stock == expected_stock, (
+            f"Saga 패턴 실패: 동시 프로세스의 재고 변경이 손실됨. "
+            f"예상={expected_stock}, 실제={final_redis_stock}, "
+            f"초기={initial_stock}, A감소={process_a_quantity}, B감소={process_b_quantity}"
+        )
+
+        # 추가 검증: DB는 여전히 원래 값
+        test_db.refresh(sample_product)
+        assert sample_product.stock == initial_stock

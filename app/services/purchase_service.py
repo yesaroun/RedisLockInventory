@@ -62,9 +62,6 @@ class PurchaseService:
         if product is None:
             raise ProductNotFoundException(product_id)
 
-        # 재고 감소 전에 원래 재고를 저장 (롤백 시 사용)
-        original_stock = InventoryService.get_stock(product_id, redis)
-
         stock_decreased = InventoryService.decrease_stock(
             product_id, quantity, redis, settings
         )
@@ -113,18 +110,10 @@ class PurchaseService:
             # DB 트랜잭션 실패 시 롤백
             db.rollback()
 
-            # Redis 재고 롤백: 원래 재고로 복원
-            # 주의: 완벽한 분산 트랜잭션이 아니며, 재고 감소와 롤백 사이에
-            # 다른 프로세스의 구매가 끼어들 수 있음 (타이밍 이슈)
-            # 더 안전한 방법: Saga 패턴, 2PC, 보상 트랜잭션 등
-            if original_stock is not None:
-                try:
-                    redis.set(f"stock:{product_id}", original_stock)
-                    # 이 방식보다는 감소시킨 양만큼 다시 증가시키는게 적절하다 왜냐하면 다른 프로세스에서 감소한만큼은 유지해야함(set보다는 increment 함수를 써야함) -> 이런걸 saga 패턴이라고함
-                    # 이러한 테스트 케이스도 만들어보면 좋을듯하다.
-                except Exception:
-                    # Redis 롤백 실패 시 재고 불일치 발생
-                    pass
+            try:
+                InventoryService.increase_stock(product_id, quantity, redis)
+            except Exception:
+                pass
 
             # 원래 예외를 다시 발생시킴
             raise e
