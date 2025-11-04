@@ -9,15 +9,18 @@
 ## 프로젝트 시나리오
 
 ### 블랙프라이데이 한정 판매
+
 이 프로젝트는 실제 이커머스에서 자주 발생하는 "한정 수량 상품의 동시 구매 폭주" 문제를 시뮬레이션합니다.
 
 **상황**: 블랙프라이데이 특가 상품 100개 한정 판매
+
 - 1초에 최대 1000명이 동시 구매 시도
 - 정확히 100개만 판매되어야 함 (초과 판매 절대 금지)
 - 공정한 선착순 보장 필요
 - 시스템 다운 없이 안정적 처리
 
 **해결 과제**:
+
 - 재고 정확성: 동시 요청 처리 시에도 정확한 재고 관리
 - 성능: 높은 처리량과 낮은 응답 시간 달성
 - 공정성: 요청 순서대로 공정한 처리
@@ -34,16 +37,21 @@
 
 ### 기술 스택
 
-- **백엔드 프레임워크**: FastAPI (비동기 API 지원).
-- **데이터 저장소**: Redis (버전 6.0 이상, 비관적 락 및 데이터 저장 용도).
-- **패키지 관리**: uv (빠른 Python 패키지 관리 도구).
-- **라이브러리**:
-    - redis-py: Redis 클라이언트.
-    - PyJWT: JWT 토큰 처리.
-    - pydantic: 데이터 유효성 검사.
-    - uvicorn: FastAPI 서버 실행.
-- **테스트 도구**: pytest (단위/통합 테스트)
-- **기타**: Docker (배포 용도).
+- **백엔드 프레임워크**: FastAPI
+- **데이터 저장소**:
+    - Redis
+    - SQLite
+- **패키지 관리**: uv
+- **핵심 라이브러리**:
+    - **redis-py**
+    - **aioredlock**
+    - **PyJWT**
+    - **pydantic**
+    - **SQLAlchemy**
+    - **uvicorn**
+- **테스트 도구**: pytest, pytest-asyncio
+- **부하 테스트**: Locust
+- **컨테이너화**: Docker & Docker Compose
 
 ## 설치 방법
 
@@ -81,8 +89,16 @@ pip install uv
    # REDIS_HOST는 'redis'로 설정 (Docker Compose 서비스명)
    ```
 
-3. **Docker Compose로 실행**
+3. **실행 방법**
+
+   ### 단일 Redis (기본 모드)
+
+   기본적으로 단일 Redis 인스턴스를 사용합니다.
+
    ```bash
+   # .env 파일에서 Redlock 비활성화 확인
+   USE_REDLOCK=false
+
    # 빌드 및 실행
    docker-compose up --build
 
@@ -91,6 +107,48 @@ pip install uv
 
    # 로그 확인
    docker-compose logs -f app
+   ```
+
+   **사용 포트:**
+   - FastAPI: `http://localhost:8080`
+   - Redis (호스트에서 접근): `localhost:6380`
+   - Redis (앱 컨테이너에서 접근): `redis:6379`
+
+   ### Redlock (분산 락 모드)
+
+   여러 Redis 인스턴스를 사용하여 Redlock 알고리즘을 테스트합니다.
+
+   ```bash
+   # .env 파일에서 Redlock 활성화
+   USE_REDLOCK=true
+
+   # Redis 노드 설정 확인 (Docker Compose 기본값)
+   REDIS_NODES=redis:6379,redis1:6379,redis2:6379,redis3:6379,redis4:6379
+
+   # 모든 서비스 실행 (5개의 Redis + FastAPI)
+   docker-compose up --build
+   ```
+
+   **사용 포트:**
+   - FastAPI: `http://localhost:8080`
+   - Redis 노드들 (호스트에서): `localhost:6380`, `6381`, `6382`, `6383`, `6384`
+   - Redis 노드들 (앱 컨테이너에서): `redis:6379`, `redis1:6379`, `redis2:6379`, `redis3:6379`, `redis4:6379`
+
+   **Redlock 동작 확인:**
+   ```bash
+   # 각 Redis 노드 상태 확인
+   docker-compose exec redis redis-cli ping
+   docker-compose exec redis1 redis-cli ping
+   docker-compose exec redis2 redis-cli ping
+   docker-compose exec redis3 redis-cli ping
+   docker-compose exec redis4 redis-cli ping
+
+   # 특정 노드의 재고 확인
+   docker-compose exec redis redis-cli GET stock:1
+   docker-compose exec redis1 redis-cli GET stock:1
+
+   # 락 상태 확인
+   docker-compose exec redis redis-cli GET lock:stock:1
    ```
 
 4. **Swagger UI 확인**
@@ -107,15 +165,45 @@ pip install uv
 
 ## 테스트
 
+### 기본 테스트
+
 - **TDD 프로세스**: 각 기능 구현 전에 pytest 테스트 작성 (예: `tests/test_auth.py`, `tests/test_inventory.py`).
 - **단위/통합 테스트**:
   ```bash
-  # uv run으로 테스트 실행
+  # 전체 테스트 실행
   uv run pytest
 
   # 상세 출력
   uv run pytest -v
+
+  # 커버리지 포함
+  uv run pytest --cov=app --cov-report=html
   ```
+
+### Redlock 테스트
+
+Redlock 알고리즘을 테스트하려면 먼저 5개의 Redis 인스턴스를 실행해야 합니다.
+
+```bash
+# 1. 의존성 설치
+uv sync --all-extras
+
+# 2. Redis 클러스터 실행
+docker-compose up -d redis redis1 redis2 redis3 redis4
+
+# 3. Redlock 테스트 실행
+uv run pytest tests/test_redlock.py -v
+
+# 4. 특정 테스트 클래스만 실행
+uv run pytest tests/test_redlock.py::TestRedlockConcurrency -v
+
+# 5. 비동기 테스트 실행
+uv run pytest tests/test_redlock.py::TestRedlockAsync -v
+
+# 6. 성능 벤치마크 테스트
+uv run pytest tests/test_redlock.py::TestRedlockPerformance -v
+```
+
 
 ## 프로젝트 문서
 
