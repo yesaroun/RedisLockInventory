@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # 단일 Redis (하위 호환성 유지)
   redis:
     image: redis:6.2-alpine
     container_name: redis-inventory
@@ -10,6 +11,75 @@ services:
     volumes:
       # 데이터 영속성을 위한 볼륨 마운트
       - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - inventory-network
+
+  # Redlock을 위한 추가 Redis 인스턴스
+  redis1:
+    image: redis:6.2-alpine
+    container_name: redis-inventory-1
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis-data-1:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - inventory-network
+
+  redis2:
+    image: redis:6.2-alpine
+    container_name: redis-inventory-2
+    restart: unless-stopped
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis-data-2:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - inventory-network
+
+  redis3:
+    image: redis:6.2-alpine
+    container_name: redis-inventory-3
+    restart: unless-stopped
+    ports:
+      - "6383:6379"
+    volumes:
+      - redis-data-3:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - inventory-network
+
+  redis4:
+    image: redis:6.2-alpine
+    container_name: redis-inventory-4
+    restart: unless-stopped
+    ports:
+      - "6384:6379"
+    volumes:
+      - redis-data-4:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -30,9 +100,19 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      redis1:
+        condition: service_healthy
+      redis2:
+        condition: service_healthy
+      redis3:
+        condition: service_healthy
+      redis4:
+        condition: service_healthy
     environment:
       - REDIS_HOST=redis
-      - REDIS_PORT=6380
+      - REDIS_PORT=6379
+      # Redlock을 위한 다중 노드 설정 (Docker 네트워크 내부는 컨테이너 포트 6379 사용)
+      - REDIS_NODES=redis:6379,redis1:6379,redis2:6379,redis3:6379,redis4:6379
       - DATABASE_URL=sqlite:////app/data/inventory.db
     env_file:
       - .env
@@ -44,6 +124,14 @@ services:
 
 volumes:
   redis-data:
+    driver: local
+  redis-data-1:
+    driver: local
+  redis-data-2:
+    driver: local
+  redis-data-3:
+    driver: local
+  redis-data-4:
     driver: local
 
 networks:

@@ -11,11 +11,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """애플리케이션 설정 클래스"""
 
-    # Redis 설정
+    # Redis 설정 (단일 Redis)
     redis_host: str
     redis_port: int
     redis_db: int
     redis_password: str
+
+    # Redlock 설정 (분산 락)
+    redis_nodes: str = ""  # 쉼표로 구분된 host:port 목록
+    use_redlock: bool = False  # Redlock 모드 활성화 여부
 
     # JWT 설정
     jwt_secret_key: str
@@ -52,6 +56,28 @@ class Settings(BaseSettings):
         if self.redis_password:
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    @property
+    def redis_node_list(self) -> list[dict[str, str | int]]:
+        """
+        Redlock을 위한 Redis 노드 목록 파싱
+
+        Returns:
+            [{"host": "redis1", "port": 6380}, {"host": "redis2", "port": 6381}, ...]
+        """
+        if not self.redis_nodes:
+            return []
+
+        nodes = []
+        for node in self.redis_nodes.split(","):
+            node = node.strip()
+            if ":" in node:
+                host, port = node.split(":")
+                nodes.append({"host": host, "port": int(port)})
+            else:
+                # 포트가 없으면 기본 포트 6380 사용
+                nodes.append({"host": node, "port": 6380})
+        return nodes
 
 
 def get_settings() -> Settings:
