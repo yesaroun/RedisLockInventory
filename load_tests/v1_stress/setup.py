@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-테스트 데이터 초기화 스크립트
+V1 Stress 시나리오 테스트 데이터 초기화
 
-부하 테스트 실행 전 테스트 상품 및 재고를 설정합니다.
+시나리오: 블랙프라이데이 - 300명이 100개 재고 경쟁
+목표: 정확히 100개만 판매, 높은 경쟁 상황에서도 정확성 보장
 """
 
 import argparse
@@ -10,7 +11,7 @@ import sys
 from pathlib import Path
 
 # 프로젝트 루트를 Python 경로에 추가
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import requests
@@ -22,9 +23,9 @@ def create_admin_user(base_url: str) -> str:
     register_response = requests.post(
         f"{base_url}/api/auth/register",
         json={
-            "username": "admin_loadtest",
+            "username": "admin_v1_stress",
             "password": "admin1234",
-            "email": "admin@loadtest.com",
+            "email": "admin_v1_stress@loadtest.com",
         },
     )
 
@@ -36,7 +37,7 @@ def create_admin_user(base_url: str) -> str:
     # 로그인
     login_response = requests.post(
         f"{base_url}/api/auth/login",
-        data={"username": "admin_loadtest", "password": "admin1234"},
+        data={"username": "admin_v1_stress", "password": "admin1234"},
     )
 
     if login_response.status_code != 200:
@@ -49,15 +50,18 @@ def create_admin_user(base_url: str) -> str:
     return token
 
 
-def create_test_product(base_url: str, token: str, name: str, stock: int) -> dict:
-    """테스트 상품 생성"""
+def create_test_product(base_url: str, token: str) -> dict:
+    """V1 Stress 테스트 상품 생성: 재고 100개 (블랙프라이데이 한정판)"""
     headers = {"Authorization": f"Bearer {token}"}
+
+    product_name = "Black Friday Limited Edition"
+    stock = 100
 
     response = requests.post(
         f"{base_url}/api/products",
         json={
-            "name": name,
-            "description": f"Load test product - {stock} units available",
+            "name": product_name,
+            "description": f"⚡ Black Friday Special - Only {stock} units! First come, first served!",
             "price": 10000,
             "stock": stock,
         },
@@ -72,7 +76,7 @@ def create_test_product(base_url: str, token: str, name: str, stock: int) -> dic
         return product
     elif response.status_code == 409:
         # 이미 존재하는 상품 - 기존 상품 사용
-        print(f"⚠️  Product '{name}' already exists")
+        print(f"⚠️  Product '{product_name}' already exists")
 
         # 기존 상품 목록에서 찾기
         list_response = requests.get(
@@ -82,7 +86,9 @@ def create_test_product(base_url: str, token: str, name: str, stock: int) -> dic
 
         if list_response.status_code == 200:
             products = list_response.json()
-            existing_product = next((p for p in products if p["name"] == name), None)
+            existing_product = next(
+                (p for p in products if p["name"] == product_name), None
+            )
 
             if existing_product:
                 print(
@@ -108,69 +114,51 @@ def check_health(base_url: str) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Setup test data for load testing")
+    parser = argparse.ArgumentParser(
+        description="Setup test data for V1 Stress scenario (Black Friday)"
+    )
     parser.add_argument(
         "--host",
         default="http://localhost:8080",
         help="API server host (default: http://localhost:8080)",
     )
-    parser.add_argument(
-        "--scenario",
-        choices=["v1_basic", "v1_stress", "custom"],
-        default="v1_basic",
-        help="Test scenario preset",
-    )
-    parser.add_argument(
-        "--stock",
-        type=int,
-        default=100,
-        help="Initial stock for custom scenario (default: 100)",
-    )
 
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
-    print("Load Test Data Setup")
+    print("⚡ V1 Stress Scenario - Black Friday Test Data Setup")
     print("=" * 60)
     print(f"Target: {args.host}")
-    print(f"Scenario: {args.scenario}")
+    print(f"Scenario: 300 aggressive buyers → 100 stock (3x competition!)")
     print("=" * 60 + "\n")
 
     # 헬스체크
     print("Checking server health...")
     if not check_health(args.host):
-        print(f"Server is not reachable at {args.host}")
+        print(f"❌ Server is not reachable at {args.host}")
         sys.exit(1)
-    print("Server is healthy\n")
+    print("✅ Server is healthy\n")
 
-    # 2. 관리자 계정 생성
+    # 관리자 계정 생성
     print("Creating admin user...")
     token = create_admin_user(args.host)
     print()
 
-    # 3. 시나리오별 상품 생성
-    print("Creating test products...")
-
-    if args.scenario == "v1_basic":
-        # 시나리오 1: 재고 100개 상품 생성 (Locust에서 100명 가상 사용자가 구매 시도)
-        create_test_product(args.host, token, "V1 Basic Test Product", 100)
-
-    elif args.scenario == "v1_stress":
-        # 블랙프라이데이: 재고 100개 상품 생성 (Locust에서 1000명 가상 사용자가 경쟁)
-        create_test_product(args.host, token, "Black Friday Limited Edition", 100)
-
-    elif args.scenario == "custom":
-        # 커스텀 시나리오: 원하는 재고 수량으로 상품 생성
-        create_test_product(args.host, token, f"Custom Test Product", args.stock)
+    # 테스트 상품 생성
+    print("Creating Black Friday limited edition product...")
+    product = create_test_product(args.host, token)
 
     print("\n" + "=" * 60)
-    print("✅ Test Data Setup Complete!")
+    print("✅ V1 Stress Test Data Setup Complete!")
     print("=" * 60)
-    print("\nYou can now run Locust tests:")
-    print(f"  locust -f load_tests/locustfile.py --host={args.host}")
-    print("\nOr headless mode:")
+    print(f"\n📦 Product ID: {product['id']}")
+    print(f"📊 Initial Stock: {product['stock']}")
+    print(f"🔥 Competition: 300 buyers fighting for {product['stock']} items!")
+    print("\nYou can now run the Locust stress test:")
+    print(f"  locust -f load_tests/v1_stress/locustfile.py --host={args.host}")
+    print("\nOr headless mode (300 users, 2 minutes):")
     print(
-        f"  locust -f load_tests/locustfile.py --headless --users 100 --spawn-rate 10 -t 60s --host={args.host}"
+        f"  locust -f load_tests/v1_stress/locustfile.py --headless --users 300 --spawn-rate 30 -t 2m --host={args.host}"
     )
     print("=" * 60 + "\n")
 
