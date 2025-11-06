@@ -70,6 +70,28 @@ def create_test_product(base_url: str, token: str, name: str, stock: int) -> dic
             f"✅ Product created: {product['name']} (ID: {product['id']}, Stock: {stock})"
         )
         return product
+    elif response.status_code == 409:
+        # 이미 존재하는 상품 - 기존 상품 사용
+        print(f"⚠️  Product '{name}' already exists")
+
+        # 기존 상품 목록에서 찾기
+        list_response = requests.get(
+            f"{base_url}/api/products",
+            headers=headers,
+        )
+
+        if list_response.status_code == 200:
+            products = list_response.json()
+            existing_product = next((p for p in products if p["name"] == name), None)
+
+            if existing_product:
+                print(
+                    f"✅ Using existing product: {existing_product['name']} (ID: {existing_product['id']}, Stock: {existing_product['stock']})"
+                )
+                return existing_product
+
+        print(f"❌ Failed to find existing product")
+        sys.exit(1)
     else:
         print(f"❌ Product creation failed: {response.status_code}")
         print(response.text)

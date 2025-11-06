@@ -14,6 +14,7 @@ from app.api.deps import get_db, get_current_user
 from app.core.config import Settings, get_settings
 from app.core.exceptions import (
     ProductNotFoundException,
+    ProductAlreadyExistsException,
     InsufficientStockException,
     LockAcquisitionException,
 )
@@ -80,15 +81,22 @@ def create_product(
         }
         ```
     """
-    product = ProductService.create_product(
-        name=product_data.name,
-        price=product_data.price,
-        stock=product_data.stock,
-        db=db,
-        redis=redis,
-        settings=settings,
-    )
-    return product
+    try:
+        product = ProductService.create_product(
+            name=product_data.name,
+            price=product_data.price,
+            stock=product_data.stock,
+            db=db,
+            redis=redis,
+            settings=settings,
+        )
+        return product
+
+    except ProductAlreadyExistsException as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
 
 
 @router.get("/products", response_model=List[ProductResponse])

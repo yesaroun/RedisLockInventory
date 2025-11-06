@@ -85,3 +85,16 @@ class LockAcquisitionException(Exception):
         self.resource = resource
         self.message = f"{message} for resource: {resource}"
         super().__init__(self.message)
+
+
+class ProductAlreadyExistsException(Exception):
+    """
+    중복된 상품명으로 상품을 생성하려 할 때 발생하는 예외
+
+    HTTP Status Code: 409 Conflict
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+        self.message = f"Product with name '{name}' already exists"
+        super().__init__(self.message)

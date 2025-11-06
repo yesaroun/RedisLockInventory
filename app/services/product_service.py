@@ -7,6 +7,7 @@ from redis import Redis
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.exceptions import ProductAlreadyExistsException
 from app.models import Product
 from app.services.inventory_service import InventoryService
 
@@ -63,7 +64,7 @@ class ProductService:
             # 상품명 중복 체크
             existing = db.query(Product).filter(Product.name == name).first()
             if existing:
-                raise Exception(f"Product with name '{name}' already exists")
+                raise ProductAlreadyExistsException(name)
 
             # DB에 상품 생성
             product = Product(
