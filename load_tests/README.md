@@ -6,11 +6,19 @@ Redis 비관적 락 기반 재고 관리 시스템의 부하 테스트 시나리
 
 ```
 load_tests/
-├── v1_basic/              # 기본 동시성 테스트 (100명 → 100개)
+├── v1_basic/                   # 기본 동시성 테스트 (100명 → 100개)
 │   ├── setup.py
 │   ├── locustfile.py
 │   └── README.md
-└── v1_stress/             # 블랙프라이데이 경쟁 (1000명 → 100개)
+├── v1_stress/                  # 블랙프라이데이 경쟁 (300명 → 100개)
+│   ├── setup.py
+│   ├── locustfile.py
+│   └── README.md
+├── v3_redlock_aioredlock/      # Redlock (aioredlock 라이브러리)
+│   ├── setup.py
+│   ├── locustfile.py
+│   └── README.md
+└── v3_redlock_manual/          # Redlock (수동 쿼럼 구현)
     ├── setup.py
     ├── locustfile.py
     └── README.md
@@ -56,6 +64,46 @@ locust -f locustfile.py --host=http://localhost:8080
 
 ➡️ [자세한 설명](v1_stress/README.md)
 
+### V3 Redlock Aioredlock - 분산 락 (라이브러리)
+**목표**: aioredlock 라이브러리를 사용한 Redlock 알고리즘 검증
+
+| 항목 | 값 |
+|------|-----|
+| 재고 | 100개 |
+| 사용자 | 300명 |
+| 경쟁률 | 3:1 |
+| Redis 노드 | 5개 (쿼럼 3/5) |
+| 예상 성공 | 100명 |
+| 난이도 | ⭐⭐⭐⭐ |
+
+```bash
+cd load_tests/v3_redlock_aioredlock
+uv run python setup.py
+locust -f locustfile.py --host=http://localhost:8080
+```
+
+➡️ [자세한 설명](v3_redlock_aioredlock/README.md)
+
+### V3 Redlock Manual - 분산 락 (수동 구현)
+**목표**: 수동 쿼럼 구현으로 Redlock 알고리즘 원리 이해
+
+| 항목 | 값 |
+|------|-----|
+| 재고 | 100개 |
+| 사용자 | 300명 |
+| 경쟁률 | 3:1 |
+| Redis 노드 | 5개 (쿼럼 3/5) |
+| 예상 성공 | 100명 |
+| 난이도 | ⭐⭐⭐⭐⭐ |
+
+```bash
+cd load_tests/v3_redlock_manual
+uv run python setup.py
+locust -f locustfile.py --host=http://localhost:8080
+```
+
+➡️ [자세한 설명](v3_redlock_manual/README.md)
+
 ## 🚀 빠른 시작
 
 ### 1. 환경 준비
@@ -80,6 +128,18 @@ locust -f load_tests/v1_basic/locustfile.py --host=http://localhost:8080
 ```bash
 uv run python load_tests/v1_stress/setup.py
 locust -f load_tests/v1_stress/locustfile.py --host=http://localhost:8080
+```
+
+**V3 Redlock Aioredlock (분산 락 - aioredlock 라이브러리)**:
+```bash
+uv run python load_tests/v3_redlock_aioredlock/setup.py
+locust -f load_tests/v3_redlock_aioredlock/locustfile.py --host=http://localhost:8080
+```
+
+**V3 Redlock Manual (분산 락 - 수동 구현)**:
+```bash
+uv run python load_tests/v3_redlock_manual/setup.py
+locust -f load_tests/v3_redlock_manual/locustfile.py --host=http://localhost:8080
 ```
 
 ### 3. Locust 웹 UI 접속
@@ -129,6 +189,16 @@ locust -f load_tests/v1_basic/locustfile.py \
 locust -f load_tests/v1_stress/locustfile.py \
   --headless --users 300 --spawn-rate 30 -t 2m \
   --host=http://localhost:8080
+
+# V3 Redlock Aioredlock
+locust -f load_tests/v3_redlock_aioredlock/locustfile.py \
+  --headless --users 300 --spawn-rate 10 -t 60s \
+  --host=http://localhost:8080
+
+# V3 Redlock Manual
+locust -f load_tests/v3_redlock_manual/locustfile.py \
+  --headless --users 300 --spawn-rate 10 -t 60s \
+  --host=http://localhost:8080
 ```
 
 ### CSV 리포트 저장
@@ -144,6 +214,7 @@ locust -f load_tests/v1_basic/locustfile.py \
 
 ### Redis 재고 확인
 
+**단일 Redis (V1 시나리오)**:
 ```bash
 # 재고 키 확인
 docker compose exec redis redis-cli KEYS "stock:*"
@@ -153,6 +224,21 @@ docker compose exec redis redis-cli GET stock:1
 
 # 락 상태 확인
 docker compose exec redis redis-cli KEYS "lock:*"
+```
+
+**다중 Redis 노드 (V3 Redlock 시나리오)**:
+```bash
+# 모든 노드의 재고 확인 (쿼럼 검증)
+for i in {0..4}; do
+  echo "Node $i:"
+  docker compose exec redis${i:-''} redis-cli GET stock:1
+done
+
+# 모든 노드의 락 상태 확인
+for i in {0..4}; do
+  echo "Node $i lock:"
+  docker compose exec redis${i:-''} redis-cli GET lock:stock:1
+done
 ```
 
 ### 로그 확인
@@ -177,23 +263,28 @@ docker compose exec app sqlite3 inventory.db "SELECT COUNT(*) FROM purchases;"
 
 ## 📈 로드맵
 
-### ✅ V1 (현재)
-- 단일 Redis 비관적 락
-- 단일 상품 재고 관리
+### ✅ V1 (완료)
+- ✅ 단일 Redis 비관적 락
+- ✅ 단일 상품 재고 관리
+- ✅ 기본 동시성 테스트 (v1_basic)
+- ✅ 블랙프라이데이 스트레스 테스트 (v1_stress)
+
+### ✅ V3 (완료)
+- ✅ Redlock 알고리즘 구현 (aioredlock 라이브러리)
+- ✅ Redlock 알고리즘 구현 (수동 쿼럼)
+- ✅ Redis 5개 노드 클러스터
+- ✅ 쿼럼 기반 합의 알고리즘
+- ✅ 노드 장애 허용 (2/5 노드 다운까지 동작)
 
 ### 🔜 V2 (계획)
 - 다중 상품 동시 판매
 - 데드락 방지 (락 획득 순서 통일)
 
-### 🔜 V3 (계획)
-- Redlock 알고리즘 구현
-- Redis 클러스터 (5개 노드)
-- 네트워크 파티션 대응
-
 ### 🔜 V4 (계획)
 - 모니터링 대시보드
 - 자동 복구 메커니즘
 - 써킷 브레이커 패턴
+- 네트워크 파티션 시뮬레이션
 
 ## 🤝 기여하기
 
@@ -210,4 +301,17 @@ docker compose exec app sqlite3 inventory.db "SELECT COUNT(*) FROM purchases;"
 
 - [Locust 공식 문서](https://docs.locust.io/)
 - [Redis 비관적 락 패턴](https://redis.io/docs/manual/patterns/distributed-locks/)
+- [Redlock 알고리즘 공식 문서](https://redis.io/docs/manual/patterns/distributed-locks/#the-redlock-algorithm)
+- [aioredlock 라이브러리](https://github.com/joanvila/aioredlock)
 - [FastAPI 성능 최적화](https://fastapi.tiangolo.com/deployment/)
+
+## 🔑 Redlock vs 단일 락 비교
+
+| 특징 | 단일 Redis 락 (V1) | Redlock (V3) |
+|------|-------------------|--------------|
+| 구현 복잡도 | 낮음 | 높음 |
+| 노드 개수 | 1개 | 5개 (권장) |
+| 가용성 | 낮음 (SPOF) | 높음 (2/5 장애 허용) |
+| 성능 | 빠름 (~100ms) | 중간 (~200ms) |
+| 정확성 | 높음 | 매우 높음 |
+| 사용 시기 | 단일 서버 환경 | 분산 환경, 고가용성 요구 |

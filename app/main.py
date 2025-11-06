@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, inventory
+from app.api.routes import auth, products, purchases, purchases_redlock
 
 app = FastAPI(
     title="Redis Lock Inventory API",
@@ -19,7 +19,9 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
-app.include_router(inventory.router, prefix="/api", tags=["inventory"])
+app.include_router(products.router, prefix="/api", tags=["products"])
+app.include_router(purchases.router, prefix="/api", tags=["purchases"])
+app.include_router(purchases_redlock.router, prefix="/api", tags=["purchases-redlock"])
 
 
 @app.get("/")
