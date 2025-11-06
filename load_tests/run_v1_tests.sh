@@ -22,7 +22,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 설정
-HOST=${LOCUST_HOST:-http://localhost:8000}
+HOST=${LOCUST_HOST:-http://localhost:8080}
 RESULTS_DIR="results"
 
 # 결과 디렉토리 생성

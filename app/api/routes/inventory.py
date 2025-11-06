@@ -224,7 +224,7 @@ def get_stock(
     )
 
 
-@router.post("/purchases", response_model=PurchaseResponse)
+@router.post("/purchases", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
 def purchase_product(
     purchase_data: PurchaseRequest,
     db: Session = Depends(get_db),

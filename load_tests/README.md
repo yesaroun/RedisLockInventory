@@ -59,7 +59,7 @@ python load_tests/setup_test_data.py --scenario custom --stock 500
 
 ```bash
 # 웹 UI 모드 (http://localhost:8089)
-locust -f load_tests/locustfile.py --host=http://localhost:8000
+locust -f load_tests/locustfile.py --host=http://localhost:8080
 
 # 헤드리스 모드 (60초 실행)
 locust -f load_tests/locustfile.py \
@@ -67,7 +67,7 @@ locust -f load_tests/locustfile.py \
     --users 100 \
     --spawn-rate 10 \
     --run-time 60s \
-    --host=http://localhost:8000
+    --host=http://localhost:8080
 ```
 
 ### 시나리오 2: 락 타임아웃 테스트
@@ -85,7 +85,7 @@ locust -f load_tests/locustfile.py \
     --users 50 \
     --spawn-rate 5 \
     --run-time 5m \
-    --host=http://localhost:8000
+    --host=http://localhost:8080
 ```
 
 ### 시나리오 3: 블랙프라이데이 스트레스 테스트
@@ -108,7 +108,7 @@ locust -f load_tests/locustfile.py \
     --spawn-rate 50 \
     --run-time 3m \
     --user-classes AggressiveBuyer \
-    --host=http://localhost:8000
+    --host=http://localhost:8080
 ```
 
 ### 시나리오 4: 성능 벤치마크 (TPS 목표 달성)
@@ -124,14 +124,14 @@ locust -f load_tests/locustfile.py \
     --run-time 2m \
     --csv=results/v1_benchmark \
     --html=results/v1_benchmark.html \
-    --host=http://localhost:8000
+    --host=http://localhost:8080
 ```
 
 ## 결과 분석
 
 ### 1. 웹 UI에서 확인 (권장)
 
-1. `locust -f load_tests/locustfile.py --host=http://localhost:8000` 실행
+1. `locust -f load_tests/locustfile.py --host=http://localhost:8080` 실행
 2. 브라우저에서 http://localhost:8089 접속
 3. Number of users, Spawn rate 설정 후 Start
 4. 실시간 차트와 통계 확인
@@ -201,7 +201,7 @@ docker-compose ps
 docker-compose restart app
 
 # 헬스체크
-curl http://localhost:8000/health
+curl http://localhost:8080/health
 ```
 
 ### 문제: "초과 판매 발생"
@@ -254,7 +254,7 @@ class NormalUser(HttpUser):
 locust -f load_tests/locustfile.py \
     --master \
     --expect-workers 3 \
-    --host=http://localhost:8000
+    --host=http://localhost:8080
 ```
 
 **Worker 노드** (다른 터미널/머신에서):

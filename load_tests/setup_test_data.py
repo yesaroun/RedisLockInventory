@@ -24,11 +24,11 @@ def create_admin_user(base_url: str) -> str:
         json={
             "username": "admin_loadtest",
             "password": "admin1234",
-            "email": "admin@loadtest.com"
-        }
+            "email": "admin@loadtest.com",
+        },
     )
 
-    if register_response.status_code not in [201, 400]:  # 400 = 이미 존재
+    if register_response.status_code not in [201, 400, 409]:  # 400, 409 = 이미 존재
         print(f"❌ Admin registration failed: {register_response.status_code}")
         print(register_response.text)
         sys.exit(1)
@@ -36,10 +36,7 @@ def create_admin_user(base_url: str) -> str:
     # 로그인
     login_response = requests.post(
         f"{base_url}/api/auth/login",
-        data={
-            "username": "admin_loadtest",
-            "password": "admin1234"
-        }
+        data={"username": "admin_loadtest", "password": "admin1234"},
     )
 
     if login_response.status_code != 200:
@@ -62,14 +59,16 @@ def create_test_product(base_url: str, token: str, name: str, stock: int) -> dic
             "name": name,
             "description": f"Load test product - {stock} units available",
             "price": 10000,
-            "stock": stock
+            "stock": stock,
         },
-        headers=headers
+        headers=headers,
     )
 
     if response.status_code == 201:
         product = response.json()
-        print(f"✅ Product created: {product['name']} (ID: {product['id']}, Stock: {stock})")
+        print(
+            f"✅ Product created: {product['name']} (ID: {product['id']}, Stock: {stock})"
+        )
         return product
     else:
         print(f"❌ Product creation failed: {response.status_code}")
@@ -90,30 +89,30 @@ def main():
     parser = argparse.ArgumentParser(description="Setup test data for load testing")
     parser.add_argument(
         "--host",
-        default="http://localhost:8000",
-        help="API server host (default: http://localhost:8000)"
+        default="http://localhost:8080",
+        help="API server host (default: http://localhost:8080)",
     )
     parser.add_argument(
         "--scenario",
         choices=["v1_basic", "v1_stress", "custom"],
         default="v1_basic",
-        help="Test scenario preset"
+        help="Test scenario preset",
     )
     parser.add_argument(
         "--stock",
         type=int,
         default=100,
-        help="Initial stock for custom scenario (default: 100)"
+        help="Initial stock for custom scenario (default: 100)",
     )
 
     args = parser.parse_args()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Load Test Data Setup")
-    print("="*60)
+    print("=" * 60)
     print(f"Target: {args.host}")
     print(f"Scenario: {args.scenario}")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     # 헬스체크
     print("Checking server health...")
@@ -142,14 +141,16 @@ def main():
         # 커스텀 시나리오: 원하는 재고 수량으로 상품 생성
         create_test_product(args.host, token, f"Custom Test Product", args.stock)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("✅ Test Data Setup Complete!")
-    print("="*60)
+    print("=" * 60)
     print("\nYou can now run Locust tests:")
     print(f"  locust -f load_tests/locustfile.py --host={args.host}")
     print("\nOr headless mode:")
-    print(f"  locust -f load_tests/locustfile.py --headless --users 100 --spawn-rate 10 -t 60s --host={args.host}")
-    print("="*60 + "\n")
+    print(
+        f"  locust -f load_tests/locustfile.py --headless --users 100 --spawn-rate 10 -t 60s --host={args.host}"
+    )
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
